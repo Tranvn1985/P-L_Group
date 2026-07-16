@@ -1,219 +1,1016 @@
-/**
- * OneOnOne Group P&L Dashboard — Apps Script data source
- * ---------------------------------------------------------------
- * HOW TO INSTALL:
- * 1. Open the Google Sheet "2_Data_PL".
- * 2. Menu: Extensions > Apps Script.
- * 3. Delete any starter code, paste this whole file in, and Save (disk icon).
- * 4. Click "Deploy" > "New deployment".
- *    - Type: "Web app"
- *    - Description: anything (e.g. "PL dashboard feed")
- *    - Execute as: "Me"
- *    - Who has access: "Anyone with the link"
- * 5. Click "Deploy", authorize the permissions when prompted.
- * 6. Copy the "Web app URL" it gives you (ends in /exec).
- * 7. Paste that URL into the dashboard's "Connect data" box.
- *
- * WHENEVER YOU EDIT THE SHEET, the dashboard will pick up the new
- * numbers the next time someone clicks "Refresh" — no rebuild needed.
- *
- * If you ever change this script's code, you must create a
- * "New deployment" again (or use "Manage deployments" > edit > new
- * version) for the changes to take effect on the existing URL.
- */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OON Group — P&L Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --white:#fff;--bg:#f4f6fa;--border:#e4e8f0;--border-soft:#eef0f5;
+  --txt:#0f172a;--txt2:#475569;--txt3:#94a3b8;
+  --blue:#4f46e5;--blue-l:#eef2ff;
+  --green:#16a34a;--green-l:#f0fdf4;
+  --red:#dc2626;--red-l:#fef2f2;
+  --amber:#d97706;--amber-l:#fffbeb;
+  --nav:#16213e;--nav2:#1a2a4a;--nav-txt:#94a3b8;--nav-act:#fff;
+  --grp:#6366f1;--grp-l:#eef2ff;
+  --oov:#0d9488;--oov-l:#f0fdfa;
+  --evl:#8b5cf6;--evl-l:#f5f3ff;
+  --ooe:#22c55e;--ooe-l:#f0fdf4;
+  --sw:228px;--hh:54px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);font-size:14px;overflow-x:hidden;}
+.mono{font-family:'JetBrains Mono',monospace;}
 
+/* SIDEBAR */
+.sidebar{position:fixed;top:0;left:0;width:var(--sw);height:100vh;background:var(--nav);display:flex;flex-direction:column;z-index:200;overflow-y:auto;}
+.sb-logo{padding:16px 18px 14px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;}
+.sb-icon{width:34px;height:34px;background:var(--blue);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff;flex-shrink:0;}
+.sb-name{font-size:12px;font-weight:700;color:#fff;line-height:1.3;}
+.sb-sub{font-size:10px;color:var(--nav-txt);}
+.sb-sect{font-size:9px;font-weight:700;color:rgba(148,163,184,.45);text-transform:uppercase;letter-spacing:1.1px;padding:16px 18px 5px;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 18px;margin:1px 8px;border-radius:7px;font-size:12px;font-weight:500;color:var(--nav-txt);cursor:pointer;transition:all .14s;border:none;background:none;width:calc(100% - 16px);text-align:left;font-family:'Inter',sans-serif;}
+.nav-item:hover{background:rgba(255,255,255,.06);color:#cbd5e1;}
+.nav-item.active{background:var(--nav2);color:var(--nav-act);font-weight:600;}
+.nav-icon{font-size:13px;width:18px;text-align:center;flex-shrink:0;opacity:.65;}
+.nav-item.active .nav-icon{opacity:1;}
+.nav-badge{margin-left:auto;background:var(--blue);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;}
+.sb-info{margin:12px 12px;padding:10px 12px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(255,255,255,.06);}
+.sb-info-row{font-size:10px;color:var(--nav-txt);line-height:2;display:flex;justify-content:space-between;gap:6px;}
+.sb-foot{margin-top:auto;padding:14px 18px;border-top:1px solid rgba(255,255,255,.05);font-size:10px;color:rgba(148,163,184,.45);line-height:1.7;}
+
+/* MAIN */
+.main{margin-left:var(--sw);min-height:100vh;display:flex;flex-direction:column;}
+.topbar{height:var(--hh);background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 26px;position:sticky;top:0;z-index:100;}
+.pg-title{font-size:15px;font-weight:700;}
+.breadcrumb{font-size:11px;color:var(--txt3);display:flex;align-items:center;gap:5px;}
+.bc-sep{color:var(--border);}
+.bc-act{color:var(--blue);font-weight:600;}
+.topbar-r{display:flex;align-items:center;gap:8px;}
+.tb-badge{background:var(--blue-l);color:var(--blue);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;}
+.tb-txt{font-size:11px;color:var(--txt3);}
+.btn{font-family:'Inter',sans-serif;font-size:12px;font-weight:600;border-radius:8px;padding:7px 13px;border:1.5px solid var(--border);background:#fff;color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;}
+.btn:hover{border-color:var(--blue);}
+.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue);}
+.btn svg{width:13px;height:13px;}
+.btn.spinning svg{animation:spin .9s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.content{padding:22px 26px;flex:1;}
+.page-section{display:none;}
+.page-section.active{display:block;}
+
+/* FILTER BAR */
+.filter-bar{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin-bottom:20px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;}
+.filter-group{display:flex;flex-direction:column;gap:4px;}
+.filter-label{font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px;}
+.filter-sep{width:1px;height:48px;background:var(--border-soft);margin:0 2px;align-self:center;}
+.dd-wrap{position:relative;}
+.dd-trigger{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--white);color:var(--txt);font-family:'Inter',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:all .14s;min-width:150px;justify-content:space-between;}
+.dd-trigger:hover{border-color:var(--blue);}
+.dd-trigger.open{border-color:var(--blue);box-shadow:0 0 0 3px rgba(29,78,216,.07);}
+.dd-val{font-weight:600;}
+.dd-arr{font-size:9px;color:var(--txt3);transition:transform .18s;}
+.dd-trigger.open .dd-arr{transform:rotate(180deg);}
+.dd-menu{position:absolute;top:calc(100% + 5px);left:0;min-width:185px;background:var(--white);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.10);z-index:400;padding:5px;display:none;}
+.dd-menu.open{display:block;animation:ddIn .12s ease;}
+@keyframes ddIn{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}
+.dd-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:500;color:var(--txt2);cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:'Inter',sans-serif;transition:background .1s;}
+.dd-item:hover{background:var(--bg);}
+.dd-item.active{background:var(--blue-l);color:var(--blue);font-weight:700;}
+.dd-item.active .dck{opacity:1;}
+.dck{width:14px;height:14px;border-radius:3px;background:var(--blue);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:0;transition:opacity .12s;}
+.dd-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dd-div{height:1px;background:var(--border-soft);margin:4px 0;}
+.dd-item.active.grp{background:var(--grp-l);color:var(--grp);} .dd-item.active.grp .dck{background:var(--grp);}
+.dd-item.active.oov{background:var(--oov-l);color:var(--oov);} .dd-item.active.oov .dck{background:var(--oov);}
+.dd-item.active.evl{background:var(--evl-l);color:var(--evl);} .dd-item.active.evl .dck{background:var(--evl);}
+.dd-item.active.ooe{background:var(--ooe-l);color:var(--ooe);} .dd-item.active.ooe .dck{background:var(--ooe);}
+.search-inline{display:flex;align-items:center;gap:7px;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;background:#fff;min-width:200px;}
+.search-inline input{border:none;outline:none;font-family:'Inter',sans-serif;font-size:12px;width:100%;color:var(--txt);}
+.search-inline svg{opacity:.4;flex-shrink:0;}
+
+.ctx-strip{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.ctx-chip{padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;}
+.ctx-chip.co{background:var(--blue-l);color:var(--blue);}
+.ctx-chip.pe{background:#f0fdf4;color:#15803d;}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:13px;margin-bottom:20px;}
+.kpi{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden;}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--blue);}
+.kpi.g::before{background:var(--green);}
+.kpi.a::before{background:var(--amber);}
+.kpi.r::before{background:var(--red);}
+.kpi.p::before{background:var(--evl);}
+.kpi.oov::before{background:var(--oov);}
+.kpi.evl::before{background:var(--evl);}
+.kpi.ooe::before{background:var(--ooe);}
+.kpi.neutral{background:var(--white);border-color:var(--border);}
+.kpi.neutral::before{background:#c7d2fe;}
+.kpi.neutral .kpi-val{color:var(--txt);font-size:22px;}
+.kpi-lbl{font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px;}
+.kpi-val{font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1;margin-bottom:4px;}
+.kpi-val.neg{color:var(--red);}
+.kpi-sub{font-size:10.5px;color:var(--txt2);}
+
+/* SECTION HEAD */
+.sec-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:13px;flex-wrap:wrap;gap:8px;}
+.sec-title{font-size:13px;font-weight:700;}
+.sec-sub{font-size:11px;color:var(--txt2);margin-top:1px;}
+.tab-row{display:flex;gap:3px;flex-wrap:wrap;}
+.tab-btn{padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;background:transparent;color:var(--txt2);transition:all .12s;}
+.tab-btn.active{background:var(--blue-l);color:var(--blue);}
+
+/* CHARTS / CARDS */
+.c2{display:grid;grid-template-columns:2fr 1fr;gap:13px;margin-bottom:20px;}
+.card{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
+.card-title{font-size:12px;font-weight:700;margin-bottom:2px;}
+.card-sub{font-size:10px;color:var(--txt2);margin-bottom:13px;}
+.cw{position:relative;height:230px;}
+.cw.lg{height:270px;}
+
+/* TABLE */
+.tbl-card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px;}
+.tbl-head{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.tbl-title{font-size:12px;font-weight:700;}
+.table-scroll{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+thead th{padding:8px 13px;text-align:right;font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;background:var(--bg);border-bottom:1px solid var(--border);white-space:nowrap;}
+thead th:first-child{text-align:left;}
+tbody tr{border-bottom:1px solid var(--border-soft);transition:background .1s;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:#fafbfd;}
+tbody tr.sub{background:var(--bg);border-top:1px solid var(--border);}
+tbody tr.sub td{font-weight:700;}
+tbody td{padding:8px 13px;font-size:11.5px;white-space:nowrap;text-align:right;}
+tbody td:first-child{text-align:left;white-space:normal;}
+tbody td.mono{font-family:'JetBrains Mono',monospace;font-size:10.5px;}
+.neg{color:var(--red);}
+
+/* PILLS */
+.cpill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;}
+.cpill.grp{background:var(--grp-l);color:var(--grp);}
+.cpill.oov{background:var(--oov-l);color:var(--oov);}
+.cpill.evl{background:var(--evl-l);color:var(--evl);}
+.cpill.ooe{background:var(--ooe-l);color:var(--ooe);}
+
+/* COMPANY CARDS */
+.co-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;}
+.co-card{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative;transition:box-shadow .2s;}
+.co-card:hover{box-shadow:0 8px 28px rgba(0,0,0,.08);}
+.co-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--grp);}
+.co-card.oov::before{background:var(--oov);}
+.co-card.evl::before{background:var(--evl);}
+.co-card.ooe::before{background:var(--ooe);}
+.co-inner{padding:16px 18px 16px 20px;}
+.co-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.co-identity{display:flex;align-items:center;gap:9px;}
+.co-avatar{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;}
+.co-avatar.grp{background:var(--grp-l);color:var(--grp);}
+.co-avatar.oov{background:var(--oov-l);color:var(--oov);}
+.co-avatar.evl{background:var(--evl-l);color:var(--evl);}
+.co-avatar.ooe{background:var(--ooe-l);color:var(--ooe);}
+.co-title{font-size:12.5px;font-weight:700;color:var(--txt);}
+.co-subtitle{font-size:9.5px;color:var(--txt3);margin-top:1px;}
+.co-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+.co-badge.u{background:var(--red-l);color:var(--red);}
+.co-badge.d{background:var(--green-l);color:var(--green);}
+.co-metrics{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border-soft);border-radius:10px;overflow:hidden;margin-bottom:12px;}
+.co-metric{padding:10px 12px;border-right:1px solid var(--border-soft);background:var(--bg);}
+.co-metric:nth-child(2n){border-right:none;}
+.co-metric-lbl{font-size:8.5px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+.co-metric-val{font-size:15px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1;color:var(--txt);}
+.co-trend-label{font-size:8.5px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.co-trend-bars{display:block;height:54px;}
+.co-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;}
+.co-bar{border-radius:2px 2px 0 0;width:100%;min-height:2px;}
+
+.empty-note{font-size:12px;color:var(--txt2);border:1px dashed var(--border);border-radius:10px;padding:16px;background:#fff;}
+.footer{border-top:1px solid var(--border);padding:11px 26px;display:flex;justify-content:space-between;background:var(--white);}
+.ft{font-size:10px;color:var(--txt3);}
+
+.modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.4);display:none;align-items:center;justify-content:center;z-index:900;}
+.modal-bg.show{display:flex;}
+.modal{background:#fff;border-radius:12px;padding:22px;width:440px;max-width:90vw;}
+.modal h3{margin:0 0 8px;font-size:14px;}
+.modal p{font-size:11.5px;color:var(--txt2);line-height:1.5;}
+.modal input{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;margin:10px 0 14px;font-family:'Inter',sans-serif;}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;}
+
+@media (max-width:1100px){.kpi-grid{grid-template-columns:repeat(3,1fr);} .co-grid{grid-template-columns:1fr;} .c2{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-icon">OO</div>
+    <div><div class="sb-name">OneOnOne Group</div><div class="sb-sub">P&amp;L Dashboard</div></div>
+  </div>
+
+  <div class="sb-sect">Main</div>
+  <button class="nav-item active" data-page="overview"><span class="nav-icon">📊</span>Overview<span class="nav-badge">LIVE</span></button>
+  <button class="nav-item" data-page="comparison"><span class="nav-icon">⚖️</span>Company Comparison</button>
+  <button class="nav-item" data-page="trend"><span class="nav-icon">📈</span>Monthly Trend</button>
+  <button class="nav-item" data-page="detail"><span class="nav-icon">📋</span>P&amp;L Detail</button>
+  <button class="nav-item" data-page="deptcost"><span class="nav-icon">🗂️</span>Department Cost</button>
+  <button class="nav-item" data-page="expense"><span class="nav-icon">💸</span>Expense</button>
+
+  <div style="margin-top:auto;">
+  <div class="sb-sect">Info</div>
+  <div class="sb-info">
+    <div class="sb-info-row"><span>📅 Reporting period</span><span id="sbPeriod">FY — Jan-Dec</span></div>
+    <div class="sb-info-row"><span>🏦 Entities</span><span>4 entities</span></div>
+    <div class="sb-info-row"><span>🔌 Source</span><span id="sbSource">Sample</span></div>
+  </div>
+  <div class="sb-foot">OneOnOne Group · Finance Team<br>Source: Google Sheets P&amp;L</div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="pg-title" id="pgTitle">Overview</div>
+      <div class="breadcrumb">P&amp;L <span class="bc-sep">›</span><span class="bc-act" id="pgCrumb">Overview</span></div>
+    </div>
+    <div class="topbar-r">
+      <span class="tb-txt" id="lastUpdated">Sample data — not connected</span>
+      <span class="tb-badge" id="tbBadge">Sample data</span>
+      <span class="tb-badge" style="background:var(--green-l);color:var(--green);">Currency: USD</span>
+      <button class="btn primary" id="refreshBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="filter-bar" id="filterBar">
+      <div class="filter-group">
+        <span class="filter-label">Entity</span>
+        <div class="dd-wrap" id="dd-ent">
+          <button class="dd-trigger" id="ddEntTrigger"><span class="dd-val" id="ddEntVal">Group</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddEntMenu"></div>
+        </div>
+      </div>
+      <div class="filter-sep"></div>
+      <div class="filter-group">
+        <span class="filter-label">Year</span>
+        <div class="dd-wrap" id="dd-year">
+          <button class="dd-trigger" id="ddYearTrigger"><span class="dd-val" id="ddYearVal">2026</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddYearMenu"></div>
+        </div>
+      </div>
+      <div class="filter-sep"></div>
+      <div class="filter-group">
+        <span class="filter-label">Month</span>
+        <div class="dd-wrap" id="dd-month">
+          <button class="dd-trigger" id="ddMonthTrigger"><span class="dd-val" id="ddMonthVal">All (YTD)</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddMonthMenu"></div>
+        </div>
+      </div>
+      <div class="filter-sep"></div>
+      <div class="filter-group">
+        <span class="filter-label">Search line item</span>
+        <div class="search-inline">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="searchInput" placeholder="e.g. Salaries, Revenue..." />
+        </div>
+      </div>
+      <div style="margin-left:auto;align-self:flex-end;">
+        <div class="ctx-strip">
+          <span class="ctx-chip co" id="ctxEnt">Group</span>
+          <span class="ctx-chip pe" id="ctxPeriod">2026 · Jan-Dec</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="pageContent"></div>
+  </div>
+
+  <div class="footer">
+    <span class="ft">OneOnOne Group — Finance</span>
+    <span class="ft" id="footRight">Sample data</span>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>Connect Apps Script Web App</h3>
+    <p>Paste the deployed Web App URL from Google Apps Script (Code.gs) here. The dashboard will call this URL every time you click Refresh.</p>
+    <input id="webAppUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec" />
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn primary" id="modalSave">Save &amp; Refresh</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= REAL DATA (source: 2_Data_PL Google Sheet) ================= */
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const PL_SHEETS = ['Group','OOV','EVL-BVI','OOE'];
-const DATA_USD_SHEET = 'Data (usd)';
+const ENTITIES = ['Group','OOV','EVL-BVI','OOE'];
+const ENT_CLS = {'Group':'grp','OOV':'oov','EVL-BVI':'evl','OOE':'ooe'};
+const ENT_COLOR = {'Group':'#6366f1','OOV':'#0d9488','EVL-BVI':'#8b5cf6','OOE':'#22c55e'};
+const ENT_COLOR_L = {'Group':'#c7d2fe','OOV':'#99f6e4','EVL-BVI':'#ddd6fe','OOE':'#bbf7d0'};
 
-function doGet(e) {
-  const out = {
-    generatedAt: new Date().toISOString(),
-    companies: {},
-    departmentCost: null,
-    feesCost: [],
-    expenseFull: []
-  };
+function sum(...a){return a[0].map((_,i)=>a.reduce((s,x)=>s+x[i],0));}
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+let PL_REAL = {"Group": {"Revenue": {"values": [825, 4725, 2173, 2356, 825, 2836, 0, 0, 0, 0, 0, 0], "children": [{"label": "SUBSCRIPTION/ LICENSE", "values": [0, 0, 0, 0, 0, 825, 0, 0, 0, 0, 0, 0]}, {"label": "PLATFORM", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "SUPPORT", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "PROFESSIONAL SERVICE", "values": [0, 0, 0, 0, 0, 2011, 0, 0, 0, 0, 0, 0]}, {"label": "OTHER", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Variable cost": {"values": [-14906, -17530, -19899, -13296, -17603, -25318, 0, 0, 0, 0, 0, 0], "children": [{"label": "Salaries/labors", "values": [-4533, -9631, -9631, -6345, -12918, -10019, 0, 0, 0, 0, 0, 0]}, {"label": "Hosting expenses", "values": [-9218, -6446, -8601, -5572, -2702, -13825, 0, 0, 0, 0, 0, 0]}, {"label": "Direct third party cost", "values": [-1140, -1438, -1652, -1379, -1953, -1444, 0, 0, 0, 0, 0, 0]}, {"label": "Professional services", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Other", "values": [-15, -15, -15, 0, -30, -30, 0, 0, 0, 0, 0, 0]}]}, "Contribution": {"values": [-14081, -12805, -17726, -10940, -16778, -22482, 0, 0, 0, 0, 0, 0], "children": []}, "Fixed cost": {"values": [-46239, -76279, -61080, -58471, -68507, -66915, 0, 0, 0, 0, 0, 0], "children": [{"label": "Salaries/labors", "values": [-37123, -58611, -48878, -44405, -52442, -53117, 0, 0, 0, 0, 0, 0]}, {"label": "Direct third party cost", "values": [-2000, -1996, -2124, -3512, -2169, -1968, 0, 0, 0, 0, 0, 0]}, {"label": "Hosting expenses", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Marketing", "values": [-119, 0, -225, 0, -3216, 0, 0, 0, 0, 0, 0, 0]}, {"label": "General and Administrative", "values": [-6997, -15672, -9853, -10554, -10680, -11830, 0, 0, 0, 0, 0, 0]}]}, "Operating profit": {"values": [-60320, -89084, -78806, -69411, -85285, -89397, 0, 0, 0, 0, 0, 0], "children": [{"label": "Non-operating revenues, cost, gains, losses", "values": [51529, -14944, -24802, -790, 1179, -5071, 0, 0, 0, 0, 0, 0]}]}, "EBITDA": {"values": [-8791, -104028, -103608, -70201, -84106, -94468, 0, 0, 0, 0, 0, 0], "children": [{"label": "Depreciation & Amortisation", "values": [-884, -884, -884, -884, -1335, -3229, 0, 0, 0, 0, 0, 0]}]}, "EBIT": {"values": [-9675, -104912, -104492, -71085, -85441, -97697, 0, 0, 0, 0, 0, 0], "children": [{"label": "Tax", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Net income": {"values": [-9675, -104912, -104492, -71085, -85441, -97697, 0, 0, 0, 0, 0, 0], "children": []}}, "OOV": {"Revenue": {"values": [825, 825, 825, 825, 825, 825, 0, 0, 0, 0, 0, 0], "children": [{"label": "SUBSCRIPTION/ LICENSE", "values": [825, 825, 825, 825, 825, 825, 0, 0, 0, 0, 0, 0]}, {"label": "PLATFORM", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "SUPPORT", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "PROFESSIONAL SERVICE", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "OTHER", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Variable cost": {"values": [-9176, -6446, -8597, -5530, -2702, -13821, 0, 0, 0, 0, 0, 0], "children": [{"label": "Salaries/labors", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Hosting expenses", "values": [-9176, -6446, -8597, -5530, -2702, -13821, 0, 0, 0, 0, 0, 0]}, {"label": "Direct third party cost", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Professional services", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Other", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Contribution": {"values": [-8351, -5621, -7772, -4705, -1877, -12996, 0, 0, 0, 0, 0, 0], "children": []}, "Fixed cost": {"values": [-7066, -10865, -6051, -2345, -14713, -7087, 0, 0, 0, 0, 0, 0], "children": [{"label": "Salaries/labors", "values": [-4500, -4500, -4500, 0, -9000, -4500, 0, 0, 0, 0, 0, 0]}, {"label": "Direct third party cost", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Hosting expenses", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Marketing", "values": [0, 0, 0, 0, -3216, 0, 0, 0, 0, 0, 0, 0]}, {"label": "General and Administrative", "values": [-2566, -6365, -1551, -2345, -2497, -2587, 0, 0, 0, 0, 0, 0]}]}, "Operating profit": {"values": [-15417, -16486, -13823, -7050, -16590, -20083, 0, 0, 0, 0, 0, 0], "children": [{"label": "Non-operating revenues, cost, gains, losses", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "EBITDA": {"values": [-15417, -16486, -13823, -7050, -16590, -20083, 0, 0, 0, 0, 0, 0], "children": [{"label": "Depreciation & Amortisation", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "EBIT": {"values": [-15417, -16486, -13823, -7050, -16590, -20083, 0, 0, 0, 0, 0, 0], "children": [{"label": "Tax", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Net income": {"values": [-15417, -16486, -13823, -7050, -16590, -20083, 0, 0, 0, 0, 0, 0], "children": []}}, "EVL-BVI": {"Revenue": {"values": [0, 3900, 1348, 1531, 0, 2011, 0, 0, 0, 0, 0, 0], "children": [{"label": "SUBSCRIPTION/ LICENSE", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "PLATFORM", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "SUPPORT", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "PROFESSIONAL SERVICE", "values": [0, 3900, 1348, 1531, 0, 2011, 0, 0, 0, 0, 0, 0]}, {"label": "OTHER", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Variable cost": {"values": [-3150, -3150, -3150, 0, -6300, -3150, 0, 0, 0, 0, 0, 0], "children": [{"label": "Salaries/labors", "values": [-3150, -3150, -3150, 0, -6300, -3150, 0, 0, 0, 0, 0, 0]}, {"label": "Hosting expenses", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Direct third party cost", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Professional services", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Other", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Contribution": {"values": [-3150, 750, -1802, 1531, -6300, -1139, 0, 0, 0, 0, 0, 0], "children": []}, "Fixed cost": {"values": [-23617, -28474, -15749, -18647, -18697, -27404, 0, 0, 0, 0, 0, 0], "children": [{"label": "Salaries/labors", "values": [-23405, -25227, -15403, -16437, -17955, -25208, 0, 0, 0, 0, 0, 0]}, {"label": "Direct third party cost", "values": [0, 0, -103, 0, -198, -176, 0, 0, 0, 0, 0, 0]}, {"label": "Hosting expenses", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Marketing", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "General and Administrative", "values": [-212, -3247, -243, -2210, -544, -2020, 0, 0, 0, 0, 0, 0]}]}, "Operating profit": {"values": [-26767, -27724, -17551, -17116, -24997, -28543, 0, 0, 0, 0, 0, 0], "children": [{"label": "Non-operating revenues, cost, gains, losses", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "EBITDA": {"values": [-26767, -27724, -17551, -17116, -24997, -28543, 0, 0, 0, 0, 0, 0], "children": [{"label": "Depreciation & Amortisation", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "EBIT": {"values": [-26767, -27724, -17551, -17116, -24997, -28543, 0, 0, 0, 0, 0, 0], "children": [{"label": "Tax", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Net income": {"values": [-26767, -27724, -17551, -17116, -24997, -28543, 0, 0, 0, 0, 0, 0], "children": []}}, "OOE": {"Revenue": {"values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "children": [{"label": "SUBSCRIPTION/ LICENSE", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "PLATFORM", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "SUPPORT", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "PROFESSIONAL SERVICE", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "OTHER", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Variable cost": {"values": [-2580, -7934, -8152, -7766, -8601, -8347, 0, 0, 0, 0, 0, 0], "children": [{"label": "Salaries/labors", "values": [-1383, -6481, -6481, -6345, -6618, -6869, 0, 0, 0, 0, 0, 0]}, {"label": "Hosting expenses", "values": [-42, 0, -4, -42, 0, -4, 0, 0, 0, 0, 0, 0]}, {"label": "Direct third party cost", "values": [-1140, -1438, -1652, -1379, -1953, -1444, 0, 0, 0, 0, 0, 0]}, {"label": "Professional services", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Other", "values": [-15, -15, -15, 0, -30, -30, 0, 0, 0, 0, 0, 0]}]}, "Contribution": {"values": [-2580, -7934, -8152, -7766, -8601, -8347, 0, 0, 0, 0, 0, 0], "children": []}, "Fixed cost": {"values": [-15556, -36940, -39280, -37479, -35097, -32424, 0, 0, 0, 0, 0, 0], "children": [{"label": "Salaries/labors", "values": [-9218, -28884, -28975, -27968, -25487, -23409, 0, 0, 0, 0, 0, 0]}, {"label": "Direct third party cost", "values": [-2000, -1996, -2021, -3512, -1971, -1792, 0, 0, 0, 0, 0, 0]}, {"label": "Hosting expenses", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "Marketing", "values": [-119, 0, -225, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "General and Administrative", "values": [-4219, -6060, -8059, -5999, -7639, -7223, 0, 0, 0, 0, 0, 0]}]}, "Operating profit": {"values": [-18136, -44874, -47432, -45245, -43698, -40771, 0, 0, 0, 0, 0, 0], "children": [{"label": "Non-operating revenues, cost, gains, losses", "values": [51529, -14944, -24802, -790, 1179, -5071, 0, 0, 0, 0, 0, 0]}]}, "EBITDA": {"values": [33393, -59818, -72234, -46035, -42519, -45842, 0, 0, 0, 0, 0, 0], "children": [{"label": "Depreciation & Amortisation", "values": [-884, -884, -884, -884, -1335, -3229, 0, 0, 0, 0, 0, 0]}]}, "EBIT": {"values": [32509, -60702, -73118, -46919, -43854, -49071, 0, 0, 0, 0, 0, 0], "children": [{"label": "Tax", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]}, "Net income": {"values": [32509, -60702, -73118, -46919, -43854, -49071, 0, 0, 0, 0, 0, 0], "children": []}}};
+let DEPT_COST_REAL = {"detected": true, "headers": ["Division", "Department", "Jan", "Feb", "Mar", "Apr", "May", "Jun"], "rows": [{"Company": "EVL/BVI", "Division": "CX", "Department": "AM", "Jan": -3997, "Feb": -4009, "Mar": -3997, "Apr": -1500, "May": -1500, "Jun": -7250}, {"Company": "EVL/BVI", "Division": "CX", "Department": "Help Desk/Support", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0}, {"Company": "EVL/BVI", "Division": "CX", "Department": "Teacher", "Jan": 0, "Feb": -2968, "Mar": 0, "Apr": -2002, "May": 0, "Jun": -1414}, {"Company": "EVL/BVI", "Division": "EduService", "Department": "Curriculum-CT", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0}, {"Company": "EVL/BVI", "Division": "EduService", "Department": "Curriculum-PD", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": -185, "May": -2422, "Jun": -2675}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "MKT", "Jan": -809, "Feb": -1791, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "Jan": -6576, "Feb": -3962, "Mar": -2920, "Apr": -4452, "May": -5983, "Jun": -3972}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-IE", "Jan": -3150, "Feb": -3150, "Mar": -3150, "Apr": 0, "May": -6300, "Jun": -3150}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-Product", "Jan": -3500, "Feb": -3500, "Mar": -3500, "Apr": -3500, "May": -3500, "Jun": -3500}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-R&DE", "Jan": -5623, "Feb": -8065, "Mar": -3369, "Apr": 0, "May": -850, "Jun": 0}, {"Company": "EVL/BVI", "Division": "Office", "Department": "BOD", "Jan": -2900, "Feb": 0, "Mar": 0, "Apr": -5000, "May": -3700, "Jun": -5800}, {"Company": "EVL/BVI", "Division": "Office", "Department": "Office", "Jan": -212, "Feb": -279, "Mar": -243, "Apr": -208, "May": -544, "Jun": -606}, {"Company": "EVL/BVI", "Division": "Office", "Department": "POPs", "Jan": 0, "Feb": 0, "Mar": -372, "Apr": -269, "May": -198, "Jun": -176}, {"Company": "OOE", "Division": "CX", "Department": "AM", "Jan": -281, "Feb": -1196, "Mar": -1196, "Apr": -2677, "May": -1196, "Jun": -1196}, {"Company": "OOE", "Division": "CX", "Department": "Help Desk/Support", "Jan": -719, "Feb": -2525, "Mar": -2598, "Apr": -2602, "May": -2559, "Jun": -2114}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-CT", "Jan": -217, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-PD", "Jan": -2209, "Feb": -7404, "Mar": -7304, "Apr": -6921, "May": -4199, "Jun": -2411}, {"Company": "OOE", "Division": "Growth", "Department": "MKT", "Jan": -219, "Feb": -914, "Mar": -837, "Apr": -612, "May": -612, "Jun": -612}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "Jan": -2619, "Feb": -2816, "Mar": -3137, "Apr": -2992, "May": -2784, "Jun": -2784}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-IE", "Jan": -2053, "Feb": -7326, "Mar": -7330, "Apr": -7217, "May": -7455, "Jun": -10132}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-Product", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "Jan": -1493, "Feb": -3562, "Mar": -3884, "Apr": -3367, "May": -4163, "Jun": -3727}, {"Company": "OOE", "Division": "Office", "Department": "BOD", "Jan": -433, "Feb": -2094, "Mar": -2094, "Apr": -2094, "May": -2094, "Jun": -2094}, {"Company": "OOE", "Division": "Office", "Department": "F&A", "Jan": -1442, "Feb": -6468, "Mar": -6954, "Apr": -6221, "May": -7566, "Jun": -5524}, {"Company": "OOE", "Division": "Office", "Department": "Office", "Jan": 45687, "Feb": -22510, "Mar": -33891, "Apr": -8329, "May": -7339, "Jun": -14501}, {"Company": "OOE", "Division": "Office", "Department": "POPs", "Jan": -1493, "Feb": -3887, "Mar": -3893, "Apr": -3887, "May": -3887, "Jun": -3976}, {"Company": "OOV", "Division": "Growth", "Department": "MKT", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": -990}, {"Company": "OOV", "Division": "Growth", "Department": "Sales/BD", "Jan": 825, "Feb": -1464, "Mar": 825, "Apr": 825, "May": -4680, "Jun": 825}, {"Company": "OOV", "Division": "LAB", "Department": "Lab-IE", "Jan": -9176, "Feb": -6446, "Mar": -8597, "Apr": -5530, "May": -2702, "Jun": -13821}, {"Company": "OOV", "Division": "LAB", "Department": "Lab-R&DE", "Jan": -6750, "Feb": -4500, "Mar": -5900, "Apr": -2250, "May": -9000, "Jun": -5900}, {"Company": "OOV", "Division": "Office", "Department": "Office", "Jan": -316, "Feb": -4076, "Mar": -151, "Apr": -95, "May": -208, "Jun": -197}]};
+let FEES_COST_REAL = [{"Company": "EVL/BVI", "Division": "CX", "FeesName": "Basic Wages", "Jan": -3997, "Feb": -4009, "Mar": -3997, "Apr": -1500, "May": -1500, "Jun": -7250, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "FeesName": "Financial Fee- POS Fee", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "FeesName": "Professional Services", "Jan": 0, "Feb": -2968, "Mar": 0, "Apr": -2002, "May": 0, "Jun": -1414, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "EduService", "FeesName": "Basic Wages", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": -185, "May": -2422, "Jun": -2675, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "EduService", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "EduService", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "FeesName": "Basic Wages", "Jan": -7385, "Feb": -9653, "Mar": -4268, "Apr": -5983, "May": -5983, "Jun": -5983, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "FeesName": "Marketing/Activities", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "FeesName": "Revenue - Other", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "FeesName": "Revenue - Platform", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "FeesName": "Revenue - Professional Service", "Jan": 0, "Feb": 3900, "Mar": 1348, "Apr": 1531, "May": 0, "Jun": 2011, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "FeesName": "Revenue - Subscription/ License", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "FeesName": "Revenue - Support", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "FeesName": "Basic Wages", "Jan": -12273, "Feb": -14715, "Mar": -10019, "Apr": -3500, "May": -10650, "Jun": -6650, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "FeesName": "Hosting expenses", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "FeesName": "Basic Wages", "Jan": -2900, "Feb": 0, "Mar": -269, "Apr": -5269, "May": -3700, "Jun": -5800, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "FeesName": "Direct third party cost", "Jan": 0, "Feb": 0, "Mar": -103, "Apr": 0, "May": -198, "Jun": -176, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "FeesName": "Financial Fee- POS Fee", "Jan": -212, "Feb": -279, "Mar": -243, "Apr": -208, "May": -544, "Jun": -606, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "FeesName": "Annual Bonus", "Jan": 2691, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "FeesName": "Basic Wages", "Jan": -2907, "Feb": -2907, "Mar": -2995, "Apr": -2970, "May": -3013, "Jun": -2667, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "FeesName": "Bonus/13th sal", "Jan": -85, "Feb": -114, "Mar": -85, "Apr": -114, "May": -28, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "FeesName": "Direct third party cost", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": -1481, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "FeesName": "Medical & insurance", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "FeesName": "Social Contribution", "Jan": -683, "Feb": -683, "Mar": -697, "Apr": -697, "May": -697, "Jun": -626, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "FeesName": "Telephone & Communication", "Jan": -16, "Feb": -17, "Mar": -17, "Apr": -17, "May": -17, "Jun": -17, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "FeesName": "Annual Bonus", "Jan": 6512, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "FeesName": "Basic Wages", "Jan": -217, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "FeesName": "Direct third party cost", "Jan": -113, "Feb": -227, "Mar": -119, "Apr": -118, "May": -118, "Jun": -118, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "FeesName": "Refreshement", "Jan": -86, "Feb": 0, "Mar": -7, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "FeesName": "Research and Development", "Jan": -6892, "Feb": -5810, "Mar": -5810, "Apr": -5507, "May": -3334, "Jun": -1870, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "FeesName": "Social Contribution", "Jan": -1630, "Feb": -1361, "Mar": -1361, "Apr": -1290, "May": -741, "Jun": -416, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "FeesName": "Telephone & Communication", "Jan": 0, "Feb": -6, "Mar": -7, "Apr": -6, "May": -6, "Jun": -7, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Annual Bonus", "Jan": 1012, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Basic Wages", "Jan": -2954, "Feb": -2954, "Mar": -3026, "Apr": -2960, "May": -2752, "Jun": -2752, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Direct third party cost", "Jan": -110, "Feb": -109, "Mar": -110, "Apr": -110, "May": -110, "Jun": -110, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Launch Expenses/Extra Marketing ", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Marketing/Activities", "Jan": -119, "Feb": 0, "Mar": -225, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Medical & insurance", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Revenue - Other", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Revenue - Platform", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Revenue - Professional Service", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Revenue - Subscription/ License", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Revenue - Support", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "FeesName": "Social Contribution", "Jan": -667, "Feb": -667, "Mar": -613, "Apr": -534, "May": -534, "Jun": -534, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Annual Bonus", "Jan": 7200, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Basic Wages", "Jan": -5451, "Feb": -5451, "Mar": -5451, "Apr": -5315, "May": -5588, "Jun": -5839, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Computer Supplies & Software", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Depreciation & Amortisation", "Jan": -853, "Feb": -853, "Mar": -853, "Apr": -853, "May": -807, "Jun": -3229, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Direct third party cost", "Jan": -1027, "Feb": -1211, "Mar": -1533, "Apr": -1261, "May": -1835, "Jun": -1326, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Hosting expenses", "Jan": -42, "Feb": 0, "Mar": -4, "Apr": -42, "May": 0, "Jun": -4, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Office Supplies", "Jan": -15, "Feb": -15, "Mar": -15, "Apr": 0, "May": -30, "Jun": -30, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Refreshement", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Research and Development", "Jan": -1885, "Feb": -1885, "Mar": -1885, "Apr": -1640, "May": -1885, "Jun": -1958, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "FeesName": "Social Contribution", "Jan": -1473, "Feb": -1473, "Mar": -1473, "Apr": -1473, "May": -1473, "Jun": -1473, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Annual Bonus", "Jan": 9025, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Basic Wages", "Jan": -9936, "Feb": -9803, "Mar": -9803, "Apr": -9803, "May": -9803, "Jun": -9886, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Bonus/13th sal", "Jan": -279, "Feb": -247, "Mar": -247, "Apr": 0, "May": -247, "Jun": -247, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Center Decoration/ Renovation/ Fit out", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Depreciation & Amortisation", "Jan": -31, "Feb": -31, "Mar": -31, "Apr": -31, "May": -528, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Direct third party cost", "Jan": -1890, "Feb": -1887, "Mar": -1911, "Apr": -1921, "May": -1861, "Jun": -1682, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Financial Fee- POS Fee", "Jan": -92, "Feb": -119, "Mar": -44, "Apr": -40, "May": -199, "Jun": -123, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Gain on Exchange Rate", "Jan": 52030, "Feb": 1, "Mar": 1, "Apr": 0, "May": 1426, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Loss on Exchange Rate", "Jan": -501, "Feb": -14945, "Mar": -24803, "Apr": -790, "May": -247, "Jun": -5071, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Medical & insurance", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Office Stationeries", "Jan": -65, "Feb": 0, "Mar": -74, "Apr": -64, "May": -63, "Jun": -150, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Office Supplies", "Jan": 485, "Feb": -1489, "Mar": -2111, "Apr": -1402, "May": -2905, "Jun": -1176, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Other Expenses", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": -1, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Professional Services", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Recruitment", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Refreshement", "Jan": 0, "Feb": 0, "Mar": -18, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Rent", "Jan": -4222, "Feb": -4222, "Mar": -5489, "Apr": -4222, "May": -4222, "Jun": -5489, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Social Contribution", "Jan": -1982, "Feb": -2010, "Mar": -2010, "Apr": -2010, "May": -2010, "Jun": -2010, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Telephone & Communication", "Jan": -2, "Feb": -3, "Mar": -9, "Apr": -3, "May": -3, "Jun": -9, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Total Expense_ Other Cost", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Total Income_ Interest", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Total Income_ Other", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Travel & Entertainment", "Jan": -159, "Feb": -159, "Mar": -196, "Apr": -159, "May": -146, "Jun": -177, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Utilities", "Jan": -62, "Feb": -45, "Mar": -87, "Apr": -86, "May": -78, "Jun": -74, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "FeesName": "Visa/ Work Permit/ House rent", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "FeesName": "Computer Supplies & Software", "Jan": 0, "Feb": -2289, "Mar": 0, "Apr": 0, "May": -5505, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": -990, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "FeesName": "Revenue - Other", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "FeesName": "Revenue - Platform", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "FeesName": "Revenue - Professional Service", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "FeesName": "Revenue - Subscription/ License", "Jan": 825, "Feb": 825, "Mar": 825, "Apr": 825, "May": 825, "Jun": 825, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "FeesName": "Revenue - Support", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "LAB", "FeesName": "Basic Wages", "Jan": -4500, "Feb": -4500, "Mar": -4500, "Apr": 0, "May": -9000, "Jun": -4500, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "LAB", "FeesName": "Hosting expenses", "Jan": -9176, "Feb": -6446, "Mar": -8597, "Apr": -5530, "May": -2702, "Jun": -13821, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "LAB", "FeesName": "Office Supplies", "Jan": -2250, "Feb": 0, "Mar": -1400, "Apr": -2250, "May": 0, "Jun": -1400, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Office", "FeesName": "Financial Fee- POS Fee", "Jan": -185, "Feb": -158, "Mar": -151, "Apr": -95, "May": -208, "Jun": -197, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Office", "FeesName": "Office Supplies", "Jan": -131, "Feb": -3918, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}];
 
-  // ---- 1) P&L sheets: Group, OOV, EVL-BVI, OOE ----
-  PL_SHEETS.forEach(function (sheetName) {
-    const sh = ss.getSheetByName(sheetName);
-    if (!sh) return;
-    out.companies[sheetName] = parsePLSheet(sh);
+
+let EXPENSE_FULL_REAL = [{"Company": "EVL/BVI", "Division": "CX", "Department": "AM", "FeesName": "Basic Wages", "Jan": -3997, "Feb": -4009, "Mar": -3997, "Apr": -1500, "May": -1500, "Jun": -7250, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "Department": "AM", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "Department": "AM", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "Department": "Help Desk/Support", "FeesName": "Basic Wages", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "Department": "Help Desk/Support", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "Department": "Teacher", "FeesName": "Financial Fee- POS Fee", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "CX", "Department": "Teacher", "FeesName": "Professional Services", "Jan": 0, "Feb": -2968, "Mar": 0, "Apr": -2002, "May": 0, "Jun": -1414, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "EduService", "Department": "Curriculum-CT", "FeesName": "Basic Wages", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "EduService", "Department": "Curriculum-CT", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Basic Wages", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": -185, "May": -2422, "Jun": -2675, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "MKT", "FeesName": "Basic Wages", "Jan": -809, "Feb": -1791, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "MKT", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Basic Wages", "Jan": -6576, "Feb": -7862, "Mar": -4268, "Apr": -5983, "May": -5983, "Jun": -5983, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Marketing/Activities", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Other", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Platform", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Professional Service", "Jan": 0, "Feb": 3900, "Mar": 1348, "Apr": 1531, "May": 0, "Jun": 2011, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Subscription/ License", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Support", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Basic Wages", "Jan": -3150, "Feb": -3150, "Mar": -3150, "Apr": 0, "May": -6300, "Jun": -3150, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Hosting expenses", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-Product", "FeesName": "Basic Wages", "Jan": -3500, "Feb": -3500, "Mar": -3500, "Apr": -3500, "May": -3500, "Jun": -3500, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-Product", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Basic Wages", "Jan": -5623, "Feb": -8065, "Mar": -3369, "Apr": 0, "May": -850, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Hosting expenses", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "Department": "BOD", "FeesName": "Basic Wages", "Jan": -2900, "Feb": 0, "Mar": 0, "Apr": -5000, "May": -3700, "Jun": -5800, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "Department": "BOD", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "Department": "Office", "FeesName": "Financial Fee- POS Fee", "Jan": -212, "Feb": -279, "Mar": -243, "Apr": -208, "May": -544, "Jun": -606, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "Department": "Office", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "Department": "POPs", "FeesName": "Basic Wages", "Jan": 0, "Feb": 0, "Mar": -269, "Apr": -269, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "EVL/BVI", "Division": "Office", "Department": "POPs", "FeesName": "Direct third party cost", "Jan": 0, "Feb": 0, "Mar": -103, "Apr": 0, "May": -198, "Jun": -176, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "AM", "FeesName": "Annual Bonus", "Jan": 914, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "AM", "FeesName": "Basic Wages", "Jan": -955, "Feb": -955, "Mar": -955, "Apr": -955, "May": -955, "Jun": -955, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "AM", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "AM", "FeesName": "Direct third party cost", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": -1481, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "AM", "FeesName": "Medical & insurance", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "AM", "FeesName": "Social Contribution", "Jan": -224, "Feb": -224, "Mar": -224, "Apr": -224, "May": -224, "Jun": -224, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "AM", "FeesName": "Telephone & Communication", "Jan": -16, "Feb": -17, "Mar": -17, "Apr": -17, "May": -17, "Jun": -17, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "Help Desk/Support", "FeesName": "Annual Bonus", "Jan": 1777, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "Help Desk/Support", "FeesName": "Basic Wages", "Jan": -1952, "Feb": -1952, "Mar": -2040, "Apr": -2015, "May": -2058, "Jun": -1712, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "Help Desk/Support", "FeesName": "Bonus/13th sal", "Jan": -85, "Feb": -114, "Mar": -85, "Apr": -114, "May": -28, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "Help Desk/Support", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "CX", "Department": "Help Desk/Support", "FeesName": "Social Contribution", "Jan": -459, "Feb": -459, "Mar": -473, "Apr": -473, "May": -473, "Jun": -402, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-CT", "FeesName": "Basic Wages", "Jan": -217, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Annual Bonus", "Jan": 6512, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Direct third party cost", "Jan": -113, "Feb": -227, "Mar": -119, "Apr": -118, "May": -118, "Jun": -118, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Refreshement", "Jan": -86, "Feb": 0, "Mar": -7, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Research and Development", "Jan": -6892, "Feb": -5810, "Mar": -5810, "Apr": -5507, "May": -3334, "Jun": -1870, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Social Contribution", "Jan": -1630, "Feb": -1361, "Mar": -1361, "Apr": -1290, "May": -741, "Jun": -416, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "EduService", "Department": "Curriculum-PD", "FeesName": "Telephone & Communication", "Jan": 0, "Feb": -6, "Mar": -7, "Apr": -6, "May": -6, "Jun": -7, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "MKT", "FeesName": "Annual Bonus", "Jan": 713, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "MKT", "FeesName": "Basic Wages", "Jan": -724, "Feb": -724, "Mar": -478, "Apr": -478, "May": -478, "Jun": -478, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "MKT", "FeesName": "Direct third party cost", "Jan": -21, "Feb": -20, "Mar": -21, "Apr": -21, "May": -21, "Jun": -21, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "MKT", "FeesName": "Launch Expenses/Extra Marketing ", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "MKT", "FeesName": "Marketing/Activities", "Jan": -17, "Feb": 0, "Mar": -225, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "MKT", "FeesName": "Medical & insurance", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "MKT", "FeesName": "Social Contribution", "Jan": -170, "Feb": -170, "Mar": -113, "Apr": -113, "May": -113, "Jun": -113, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Annual Bonus", "Jan": 299, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Basic Wages", "Jan": -2230, "Feb": -2230, "Mar": -2548, "Apr": -2482, "May": -2274, "Jun": -2274, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Direct third party cost", "Jan": -89, "Feb": -89, "Mar": -89, "Apr": -89, "May": -89, "Jun": -89, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Marketing/Activities", "Jan": -102, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Medical & insurance", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Other", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Platform", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Professional Service", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Subscription/ License", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Support", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Social Contribution", "Jan": -497, "Feb": -497, "Mar": -500, "Apr": -421, "May": -421, "Jun": -421, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Annual Bonus", "Jan": 5315, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Basic Wages", "Jan": -5451, "Feb": -5451, "Mar": -5451, "Apr": -5315, "May": -5588, "Jun": -5839, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Depreciation & Amortisation", "Jan": -830, "Feb": -830, "Mar": -830, "Apr": -830, "May": -807, "Jun": -3229, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Hosting expenses", "Jan": -42, "Feb": 0, "Mar": -4, "Apr": -42, "May": 0, "Jun": -4, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Office Supplies", "Jan": -15, "Feb": -15, "Mar": -15, "Apr": 0, "May": -30, "Jun": -30, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Social Contribution", "Jan": -1030, "Feb": -1030, "Mar": -1030, "Apr": -1030, "May": -1030, "Jun": -1030, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-Product", "FeesName": "Basic Wages", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-Product", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-Product", "FeesName": "Research and Development", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Annual Bonus", "Jan": 1885, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Basic Wages", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Computer Supplies & Software", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Depreciation & Amortisation", "Jan": -23, "Feb": -23, "Mar": -23, "Apr": -23, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Direct third party cost", "Jan": -1027, "Feb": -1211, "Mar": -1533, "Apr": -1261, "May": -1835, "Jun": -1326, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Hosting expenses", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Refreshement", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Research and Development", "Jan": -1885, "Feb": -1885, "Mar": -1885, "Apr": -1640, "May": -1885, "Jun": -1958, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Social Contribution", "Jan": -443, "Feb": -443, "Mar": -443, "Apr": -443, "May": -443, "Jun": -443, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "BOD", "FeesName": "Annual Bonus", "Jan": 1661, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "BOD", "FeesName": "Basic Wages", "Jan": -1710, "Feb": -1710, "Mar": -1710, "Apr": -1710, "May": -1710, "Jun": -1710, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "BOD", "FeesName": "Bonus/13th sal", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "BOD", "FeesName": "Medical & insurance", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "BOD", "FeesName": "Social Contribution", "Jan": -384, "Feb": -384, "Mar": -384, "Apr": -384, "May": -384, "Jun": -384, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "BOD", "FeesName": "Visa/ Work Permit/ House rent", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "F&A", "FeesName": "Annual Bonus", "Jan": 4834, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "F&A", "FeesName": "Basic Wages", "Jan": -4943, "Feb": -4943, "Mar": -4943, "Apr": -4943, "May": -4943, "Jun": -4943, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "F&A", "FeesName": "Bonus/13th sal", "Jan": -247, "Feb": -247, "Mar": -247, "Apr": 0, "May": -247, "Jun": -247, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "F&A", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "F&A", "FeesName": "Depreciation & Amortisation", "Jan": -31, "Feb": -31, "Mar": -31, "Apr": -31, "May": -522, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "F&A", "FeesName": "Office Supplies", "Jan": -163, "Feb": -355, "Mar": -841, "Apr": -355, "May": -962, "Jun": 558, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "F&A", "FeesName": "Social Contribution", "Jan": -892, "Feb": -892, "Mar": -892, "Apr": -892, "May": -892, "Jun": -892, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Center Decoration/ Renovation/ Fit out", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Depreciation & Amortisation", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": -6, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Direct third party cost", "Jan": -1890, "Feb": -1887, "Mar": -1911, "Apr": -1921, "May": -1861, "Jun": -1682, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Financial Fee- POS Fee", "Jan": -92, "Feb": -119, "Mar": -44, "Apr": -40, "May": -199, "Jun": -123, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Gain on Exchange Rate", "Jan": 52030, "Feb": 1, "Mar": 1, "Apr": 0, "May": 1426, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Loss on Exchange Rate", "Jan": -501, "Feb": -14945, "Mar": -24803, "Apr": -790, "May": -247, "Jun": -5071, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Office Stationeries", "Jan": -65, "Feb": 0, "Mar": -74, "Apr": -64, "May": -63, "Jun": -150, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Office Supplies", "Jan": 648, "Feb": -1134, "Mar": -1270, "Apr": -1047, "May": -1943, "Jun": -1734, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Other Expenses", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": -1, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Professional Services", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Refreshement", "Jan": 0, "Feb": 0, "Mar": -18, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Rent", "Jan": -4222, "Feb": -4222, "Mar": -5489, "Apr": -4222, "May": -4222, "Jun": -5489, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Social Contribution", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Total Expense_ Other Cost", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Total Income_ Interest", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Total Income_ Other", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Travel & Entertainment", "Jan": -159, "Feb": -159, "Mar": -196, "Apr": -159, "May": -146, "Jun": -177, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "Office", "FeesName": "Utilities", "Jan": -62, "Feb": -45, "Mar": -87, "Apr": -86, "May": -78, "Jun": -74, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "POPs", "FeesName": "Annual Bonus", "Jan": 2530, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "POPs", "FeesName": "Basic Wages", "Jan": -3283, "Feb": -3150, "Mar": -3150, "Apr": -3150, "May": -3150, "Jun": -3233, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "POPs", "FeesName": "Bonus/13th sal", "Jan": -32, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "POPs", "FeesName": "Commission", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "POPs", "FeesName": "Recruitment", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "POPs", "FeesName": "Social Contribution", "Jan": -706, "Feb": -734, "Mar": -734, "Apr": -734, "May": -734, "Jun": -734, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOE", "Division": "Office", "Department": "POPs", "FeesName": "Telephone & Communication", "Jan": -2, "Feb": -3, "Mar": -9, "Apr": -3, "May": -3, "Jun": -9, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "Department": "MKT", "FeesName": "Office Supplies", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": -990, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Computer Supplies & Software", "Jan": 0, "Feb": -2289, "Mar": 0, "Apr": 0, "May": -5505, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Other", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Platform", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Professional Service", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Subscription/ License", "Jan": 825, "Feb": 825, "Mar": 825, "Apr": 825, "May": 825, "Jun": 825, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Growth", "Department": "Sales/BD", "FeesName": "Revenue - Support", "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "LAB", "Department": "Lab-IE", "FeesName": "Hosting expenses", "Jan": -9176, "Feb": -6446, "Mar": -8597, "Apr": -5530, "May": -2702, "Jun": -13821, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Basic Wages", "Jan": -4500, "Feb": -4500, "Mar": -4500, "Apr": 0, "May": -9000, "Jun": -4500, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "LAB", "Department": "Lab-R&DE", "FeesName": "Office Supplies", "Jan": -2250, "Feb": 0, "Mar": -1400, "Apr": -2250, "May": 0, "Jun": -1400, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Office", "Department": "Office", "FeesName": "Financial Fee- POS Fee", "Jan": -185, "Feb": -158, "Mar": -151, "Apr": -95, "May": -208, "Jun": -197, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}, {"Company": "OOV", "Division": "Office", "Department": "Office", "FeesName": "Office Supplies", "Jan": -131, "Feb": -3918, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0}];
+const ORDER = ['Revenue','Variable cost','Contribution','Fixed cost','Operating profit','EBITDA','EBIT','Net income'];
+const LABEL_MAP = {'Variable cost':'Cost of Goods Sold','Contribution':'Gross profit','Fixed cost':'Expense'};
+const dispLabel = k => LABEL_MAP[k] || k;
+function buildCompanyFromReal(entityLabel, raw){
+  const lines = {};
+  ORDER.forEach(top=>{
+    const sec = raw[top] || {values:MONTHS.map(()=>0), children:[]};
+    lines[top] = {entity:entityLabel, values:sec.values, children:sec.children};
   });
+  return {months:MONTHS, order:ORDER, lines};
+}
 
-  // ---- 2) Data (usd) sheet: Division / Department / Fees Name ----
-  const dataSh = ss.getSheetByName(DATA_USD_SHEET);
-  if (dataSh) {
-    const parsed = parseDataUsdSheet(dataSh);
-    out.departmentCost = parsed.departmentCost;
-    out.feesCost = parsed.feesCost;
-    out.expenseFull = parsed.expenseFull;
+const SAMPLE = { generatedAt:null, companies:{}, departmentCost: DEPT_COST_REAL };
+SAMPLE.companies['OOV'] = buildCompanyFromReal('OOV', PL_REAL['OOV']);
+SAMPLE.companies['EVL-BVI'] = buildCompanyFromReal('EVL/BVI', PL_REAL['EVL-BVI']);
+SAMPLE.companies['OOE'] = buildCompanyFromReal('OOE', PL_REAL['OOE']);
+SAMPLE.companies['Group'] = buildCompanyFromReal('Group', PL_REAL['Group']);
+
+/* ================= STATE ================= */
+let DATA=SAMPLE, isLive=false, currentEntity='Group', currentPage='overview', searchTerm='', webAppUrl=null;
+let currentYear='2026', currentMonth='All';
+const YEARS=['2026'];
+const MONTH_OPTIONS=['All','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monthLabel=m=>m==='All'?'All (YTD)':m;
+const nf=n=>{const r=Math.round(n); if(r===0) return '-'; return (r<0?'(':'')+Math.abs(r).toLocaleString('en-US')+(r<0?')':'');};
+const fmt=n=>`<span class="${n<0?'neg':''} mono">${nf(n)}</span>`;
+const yearTotal=a=>a.reduce((s,v)=>s+v,0);
+const periodTotal=a=>currentMonth==='All'?yearTotal(a):(a[MONTHS.indexOf(currentMonth)]||0);
+const pillClass=e=>ENT_CLS[e]||'grp';
+function sparklineSVG(values,color,gid,dimMonth){
+  const w=300,h=54,pad=4;
+  const max=Math.max(...values,0), min=Math.min(...values,0);
+  const range=(max-min)||1;
+  const step=(w-pad*2)/(values.length-1||1);
+  const pts=values.map((v,i)=>{
+    const x=pad+i*step;
+    const y=pad+(h-pad*2)*(1-(v-min)/range);
+    return [x,y];
+  });
+  function smoothPath(points){
+    if(points.length<2) return '';
+    let d=`M${points[0][0].toFixed(1)},${points[0][1].toFixed(1)}`;
+    for(let i=0;i<points.length-1;i++){
+      const p0=points[i===0?0:i-1], p1=points[i], p2=points[i+1], p3=points[i+2===points.length+1?i+1:(i+2<points.length?i+2:i+1)];
+      const p3pt=points[Math.min(i+2,points.length-1)];
+      const c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
+      const c2x=p2[0]-(p3pt[0]-p1[0])/6, c2y=p2[1]-(p3pt[1]-p1[1])/6;
+      d+=` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+    }
+    return d;
+  }
+  const linePath=smoothPath(pts);
+  const areaPath=linePath+` L${pts[pts.length-1][0].toFixed(1)},${h-pad} L${pts[0][0].toFixed(1)},${h-pad} Z`;
+  const dots=pts.map((p,i)=>{
+    const dim=(dimMonth&&MONTHS[i]!==dimMonth)?'opacity:.3;':'';
+    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.2" fill="${color}" style="${dim}"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;overflow:visible;">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${areaPath}" fill="url(#${gid})" stroke="none"/>
+    <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}
+  </svg>`;
+}
+
+/* ================= CONFIG PERSIST ================= */
+async function loadConfig(){
+  try{
+    const v = localStorage.getItem('pl_dashboard_webapp_url');
+    if(v) webAppUrl = v;
+  }catch(e){ console.error('loadConfig failed', e); }
+}
+async function saveConfig(url){
+  webAppUrl = url;
+  try{
+    localStorage.setItem('pl_dashboard_webapp_url', url);
+  }catch(e){ console.error('saveConfig failed', e); }
+}
+
+async function fetchLiveData(){
+  if(!webAppUrl){
+    openModal();
+    return;
+  }
+  const btn=document.getElementById('refreshBtn'); btn.classList.add('spinning');
+  try{
+    const res=await fetch(webAppUrl); const json=await res.json();
+    if(json && json.companies){
+      const ENTITY_LABEL={'Group':'Group','OOV':'OOV','EVL-BVI':'EVL/BVI','OOE':'OOE'};
+      const newCompanies={};
+      ENTITIES.forEach(key=>{
+        const raw=json.companies[key];
+        if(!raw) return;
+        const lines={};
+        const secOrder=(raw.order&&raw.order.length)?raw.order:ORDER;
+        secOrder.forEach(top=>{
+          const sec=(raw.lines&&raw.lines[top])?raw.lines[top]:{values:MONTHS.map(()=>0),children:[]};
+          lines[top]={entity:ENTITY_LABEL[key],values:sec.values,children:sec.children||[]};
+        });
+        newCompanies[key]={months:MONTHS,order:secOrder,lines};
+      });
+      DATA={
+        generatedAt: json.generatedAt,
+        companies: newCompanies,
+        departmentCost: json.departmentCost || DATA.departmentCost
+      };
+      if(json.departmentCost) DEPT_COST_REAL=json.departmentCost;
+      if(json.feesCost) FEES_COST_REAL=json.feesCost;
+      if(json.expenseFull) EXPENSE_FULL_REAL=json.expenseFull;
+      isLive=true;
+      const ts=new Date(json.generatedAt||Date.now()).toLocaleString('vi-VN');
+      document.getElementById('lastUpdated').textContent='Updated '+ts;
+      document.getElementById('tbBadge').textContent='Live data';
+      document.getElementById('sbSource').textContent='Google Sheets (live)';
+      document.getElementById('footRight').textContent='Live · '+ts;
+    }
+  }catch(err){ console.error(err); alert('Could not fetch data. Please check the Web App URL and access permissions ("Anyone with the link").'); }
+  btn.classList.remove('spinning'); render();
+}
+function openModal(){ document.getElementById('webAppUrlInput').value=webAppUrl||''; document.getElementById('modalBg').classList.add('show'); }
+function closeModal(){ document.getElementById('modalBg').classList.remove('show'); }
+document.getElementById('modalCancel').onclick=closeModal;
+document.getElementById('modalSave').onclick=async()=>{ const v=document.getElementById('webAppUrlInput').value.trim(); if(v){ await saveConfig(v); closeModal(); fetchLiveData(); } };
+document.getElementById('refreshBtn').onclick=fetchLiveData;
+document.getElementById('searchInput').oninput=e=>{ searchTerm=e.target.value.toLowerCase(); render(); };
+
+/* ================= NAV / DROPDOWN ================= */
+document.querySelectorAll('.nav-item').forEach(btn=>{
+  btn.onclick=()=>{ currentPage=btn.dataset.page;
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); render(); };
+});
+function buildEntityDropdown(){
+  const menu=document.getElementById('ddEntMenu'); menu.innerHTML='';
+  ENTITIES.forEach(ent=>{
+    const b=document.createElement('button');
+    b.className='dd-item'+(ent===currentEntity?' active '+pillClass(ent):'');
+    b.innerHTML=`<span class="dck">✓</span><span class="dd-dot" style="background:${ENT_COLOR[ent]}"></span>${ent}`;
+    b.onclick=()=>{ currentEntity=ent; document.getElementById('ddEntMenu').classList.remove('open');
+      document.getElementById('ddEntTrigger').classList.remove('open'); render(); };
+    menu.appendChild(b);
+  });
+}
+document.getElementById('ddEntTrigger').onclick=()=>{
+  document.getElementById('ddEntMenu').classList.toggle('open');
+  document.getElementById('ddEntTrigger').classList.toggle('open');
+};
+document.addEventListener('click',e=>{
+  if(!document.getElementById('dd-ent').contains(e.target)){
+    document.getElementById('ddEntMenu').classList.remove('open');
+    document.getElementById('ddEntTrigger').classList.remove('open');
+  }
+});
+
+function buildYearDropdown(){
+  const menu=document.getElementById('ddYearMenu'); menu.innerHTML='';
+  YEARS.forEach(yr=>{
+    const b=document.createElement('button');
+    b.className='dd-item'+(yr===currentYear?' active':'');
+    b.innerHTML=`<span class="dck">✓</span>${yr}`;
+    b.onclick=()=>{ currentYear=yr; document.getElementById('ddYearMenu').classList.remove('open');
+      document.getElementById('ddYearTrigger').classList.remove('open'); render(); };
+    menu.appendChild(b);
+  });
+}
+document.getElementById('ddYearTrigger').onclick=()=>{
+  document.getElementById('ddYearMenu').classList.toggle('open');
+  document.getElementById('ddYearTrigger').classList.toggle('open');
+};
+document.addEventListener('click',e=>{
+  if(!document.getElementById('dd-year').contains(e.target)){
+    document.getElementById('ddYearMenu').classList.remove('open');
+    document.getElementById('ddYearTrigger').classList.remove('open');
+  }
+});
+
+function buildMonthDropdown(){
+  const menu=document.getElementById('ddMonthMenu'); menu.innerHTML='';
+  MONTH_OPTIONS.forEach(m=>{
+    const b=document.createElement('button');
+    b.className='dd-item'+(m===currentMonth?' active':'');
+    b.innerHTML=`<span class="dck">✓</span>${monthLabel(m)}`;
+    b.onclick=()=>{ currentMonth=m; document.getElementById('ddMonthMenu').classList.remove('open');
+      document.getElementById('ddMonthTrigger').classList.remove('open'); render(); };
+    menu.appendChild(b);
+  });
+}
+document.getElementById('ddMonthTrigger').onclick=()=>{
+  document.getElementById('ddMonthMenu').classList.toggle('open');
+  document.getElementById('ddMonthTrigger').classList.toggle('open');
+};
+document.addEventListener('click',e=>{
+  if(!document.getElementById('dd-month').contains(e.target)){
+    document.getElementById('ddMonthMenu').classList.remove('open');
+    document.getElementById('ddMonthTrigger').classList.remove('open');
+  }
+});
+
+/* ================= CHARTS ================= */
+let chartRefs={};
+const CD={responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Inter',size:10},boxWidth:10,padding:8}}},scales:{x:{grid:{display:false},ticks:{font:{family:'Inter',size:9}}},y:{grid:{color:'#f0f2f5'},ticks:{font:{family:'JetBrains Mono',size:9},callback:v=>v.toLocaleString('en-US')}}}};
+function mk(id,type,data,opts={}){
+  const el=document.getElementById(id); if(!el) return;
+  if(chartRefs[id]) chartRefs[id].destroy();
+  chartRefs[id]=new Chart(el.getContext('2d'),{type,data,options:{...CD,...opts}});
+}
+
+/* ================= PAGE META ================= */
+const PAGE_META={
+  overview:['Overview','Overview'],
+  comparison:['Company Comparison','Company Comparison'],
+  trend:['Monthly Trend','Monthly Trend'],
+  detail:['P&L Detail','P&L Detail'],
+  deptcost:['Department Cost','Department Cost'],
+  expense:['Expense','Expense']
+};
+
+function render(){
+  buildEntityDropdown();
+  buildYearDropdown();
+  buildMonthDropdown();
+  document.getElementById('ddEntVal').textContent=currentEntity;
+  document.getElementById('ddYearVal').textContent=currentYear;
+  document.getElementById('ddMonthVal').textContent=monthLabel(currentMonth);
+  document.getElementById('ctxEnt').textContent=currentEntity;
+  document.getElementById('ctxPeriod').textContent=currentYear+' · '+(currentMonth==='All'?'Jan-Dec':currentMonth);
+  document.getElementById('pgTitle').textContent=PAGE_META[currentPage][0];
+  document.getElementById('pgCrumb').textContent=PAGE_META[currentPage][1];
+  const filterBar=document.getElementById('filterBar');
+  filterBar.style.display = (currentPage==='comparison') ? 'none' : 'flex';
+
+  const el=document.getElementById('pageContent'); el.innerHTML='';
+  const renderers={overview:renderOverview,comparison:renderComparison,trend:renderTrend,detail:renderDetail,deptcost:renderDeptCost,expense:renderExpense};
+  renderers[currentPage](el);
+}
+
+/* ================= OVERVIEW ================= */
+function renderOverview(el){
+  const kpiDefs=[['Revenue','Revenue','neutral'],['Variable cost','Cost of Goods Sold','neutral'],['Contribution','Gross profit','neutral'],
+    ['Fixed cost','Expense','neutral'],['EBITDA','EBITDA','neutral']];
+  const comp=DATA.companies[currentEntity]||DATA.companies['Group'];
+  const periodLabel=currentMonth==='All'?'Full year':currentMonth;
+  el.innerHTML += `<div class="kpi-grid">${kpiDefs.map(([k,label,cls])=>{
+    const v=comp.lines[k]?periodTotal(comp.lines[k].values):0;
+    return `<div class="kpi ${cls}"><div class="kpi-lbl">${label}</div><div class="kpi-val ${v<0?'neg':''}">${nf(v)}</div><div class="kpi-sub">${currentEntity} · ${periodLabel}</div></div>`;
+  }).join('')}</div>`;
+
+  el.innerHTML += `<div class="sec-head"><div><div class="sec-title">Company overview</div><div class="sec-sub">P&amp;L by company — ${periodLabel.toLowerCase()} figures</div></div></div>`;
+  el.innerHTML += `<div class="co-grid">${ENTITIES.filter(e=>e!=='Group').map(ent=>{
+    const c=DATA.companies[ent]; const cls=pillClass(ent);
+    const rev=periodTotal(c.lines['Revenue'].values), ebitda=periodTotal(c.lines['EBITDA'].values);
+    const bars=c.lines['Revenue'].values;
+    return `<div class="co-card ${cls}"><div class="co-inner">
+      <div class="co-header">
+        <div class="co-identity"><div class="co-avatar ${cls}">${ent.slice(0,2)}</div>
+          <div><div class="co-title">${ent}</div><div class="co-subtitle">Subsidiary</div></div></div>
+        <span class="co-badge ${ebitda<0?'u':'d'}">${ebitda<0?'Negative EBITDA':'Positive EBITDA'}</span>
+      </div>
+      <div class="co-metrics">
+        <div class="co-metric"><div class="co-metric-lbl">Revenue</div><div class="co-metric-val mono">${nf(rev)}</div></div>
+        <div class="co-metric"><div class="co-metric-lbl">EBITDA</div><div class="co-metric-val mono ${ebitda<0?'neg':''}">${nf(ebitda)}</div></div>
+      </div>
+      <div class="co-trend-label">Monthly revenue</div>
+      <div class="co-trend-bars">${sparklineSVG(bars,ENT_COLOR[ent],'spark-'+cls,currentMonth!=='All'?currentMonth:null)}</div>
+    </div></div>`;
+  }).join('')}</div>`;
+
+  el.innerHTML += `<div class="c2">    <div class="card"><div class="card-title">${currentEntity} monthly trend</div><div class="card-sub">Revenue · Gross profit · EBITDA</div><div class="cw lg"><canvas id="ovChart"></canvas></div></div>
+    <div class="card"><div class="card-title">Revenue mix by company</div><div class="card-sub">Full-year share</div><div class="cw lg"><canvas id="ovPie"></canvas></div></div>
+  </div>`;
+
+  makeOverviewCharts(comp);
+}
+function makeOverviewCharts(comp){
+  mk('ovChart','bar',{labels:MONTHS,datasets:[
+    {label:'Revenue',data:comp.lines['Revenue'].values,backgroundColor:'#64748b',borderRadius:3},
+    {label:'Gross profit',data:comp.lines['Contribution'].values,backgroundColor:'#94a3b8',borderRadius:3},
+    {label:'EBITDA',data:comp.lines['EBITDA'].values,backgroundColor:'#cbd5e1',borderRadius:3}
+  ]});
+  const subs=ENTITIES.filter(e=>e!=='Group');
+  const pieColors=['#818cf8','#0d9488','#22c55e'];
+  mk('ovPie','doughnut',{labels:subs,datasets:[{data:subs.map(e=>yearTotal(DATA.companies[e].lines['Revenue'].values)),backgroundColor:subs.map((e,i)=>pieColors[i%pieColors.length]),borderWidth:2,borderColor:'#fff'}]},
+    {plugins:{legend:{position:'bottom',labels:{font:{family:'Inter',size:10},boxWidth:10}}}});
+}
+
+/* ================= COMPARISON ================= */
+function renderComparison(el){
+  const metrics=['Revenue','Variable cost','Contribution','Fixed cost','EBITDA','Net income'];
+  el.innerHTML = `<div class="tbl-card"><div class="tbl-head"><span class="tbl-title">Comparison table — full year</span></div>
+    <div class="table-scroll"><table><thead><tr><th>Metric</th>${ENTITIES.map(e=>`<th>${e}</th>`).join('')}</tr></thead><tbody>
+    ${metrics.map(m=>`<tr><td>${dispLabel(m)}</td>${ENTITIES.map(e=>{
+      const c=DATA.companies[e]; const v=c&&c.lines[m]?yearTotal(c.lines[m].values):0;
+      return `<td>${fmt(v)}</td>`;
+    }).join('')}</tr>`).join('')}
+    </tbody></table></div></div>
+    <div class="card"><div class="card-title">Visual comparison</div><div class="card-sub">Revenue · EBITDA · Net income by company</div><div class="cw lg"><canvas id="cmpChart"></canvas></div></div>`;
+
+  mk('cmpChart','bar',{labels:ENTITIES,datasets:[
+    {label:'Revenue',data:ENTITIES.map(e=>yearTotal(DATA.companies[e]?.lines['Revenue']?.values||[])),backgroundColor:ENTITIES.map(e=>ENT_COLOR[e]),borderRadius:4},
+    {label:'EBITDA',data:ENTITIES.map(e=>yearTotal(DATA.companies[e]?.lines['EBITDA']?.values||[])),backgroundColor:ENTITIES.map(e=>ENT_COLOR_L[e]),borderRadius:4}
+  ]});
+}
+
+/* ================= TREND ================= */
+function renderTrend(el){
+  const metrics=['Revenue','Variable cost','Contribution','Fixed cost','EBITDA','Net income'];
+  el.innerHTML = `<div class="sec-head"><div><div class="sec-title">Monthly Trend</div><div class="sec-sub">Comparison across companies by metric</div></div>
+    <div class="tab-row" id="metricTabs">${metrics.map((m,i)=>`<button class="tab-btn${i===0?' active':''}" data-m="${m}">${dispLabel(m)}</button>`).join('')}</div></div>
+    <div class="card"><div class="cw lg"><canvas id="trendChart"></canvas></div></div>`;
+  const tabs=el.querySelectorAll('.tab-btn');
+  const draw=(metric)=>{
+    mk('trendChart','bar',{labels:MONTHS,datasets:ENTITIES.map(e=>({
+      label:e,data:DATA.companies[e]?.lines[metric]?.values||MONTHS.map(()=>0),
+      backgroundColor:ENT_COLOR[e],borderRadius:3
+    }))});
+  };
+  tabs.forEach(t=>t.onclick=()=>{ tabs.forEach(x=>x.classList.remove('active')); t.classList.add('active'); draw(t.dataset.m); });
+  draw(metrics[0]);
+}
+
+/* ================= DETAIL ================= */
+function renderDetail(el){
+  const comp=DATA.companies[currentEntity];
+  if(!comp){ el.innerHTML='<div class="empty-note">No data available for this entity.</div>'; return; }
+  let rows='';
+  comp.order.forEach(top=>{
+    const t=comp.lines[top];
+    const topLabel=dispLabel(top);
+    if(!searchTerm||top.toLowerCase().includes(searchTerm)||topLabel.toLowerCase().includes(searchTerm))
+      rows+=`<tr class="sub"><td>${topLabel}</td>${t.values.map(v=>`<td class="mono ${v<0?'neg':''}">${nf(v)}</td>`).join('')}<td class="mono ${yearTotal(t.values)<0?'neg':''}">${nf(yearTotal(t.values))}</td></tr>`;
+    t.children.forEach(c=>{
+      if(!searchTerm||c.label.toLowerCase().includes(searchTerm)||top.toLowerCase().includes(searchTerm)||topLabel.toLowerCase().includes(searchTerm))
+        rows+=`<tr><td style="padding-left:26px;color:var(--txt3)">${c.label}</td>${c.values.map(v=>`<td class="mono ${v<0?'neg':''}">${nf(v)}</td>`).join('')}<td class="mono ${yearTotal(c.values)<0?'neg':''}">${nf(yearTotal(c.values))}</td></tr>`;
+    });
+  });
+  el.innerHTML = `<div class="tbl-card"><div class="tbl-head"><span class="tbl-title">P&amp;L Detail — <span class="cpill ${pillClass(currentEntity)}">${currentEntity}</span></span></div>
+    <div class="table-scroll"><table><thead><tr><th>Line item</th>${MONTHS.map(m=>`<th>${m}</th>`).join('')}<th>Full year</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="14">No matching line items found.</td></tr>'}</tbody></table></div></div>`;
+}
+
+
+/* ================= EXPENSE ================= */
+function renderExpense(el){
+  const rawRows=(typeof EXPENSE_FULL_REAL!=='undefined'?EXPENSE_FULL_REAL:[]);
+  const ENT_TO_CO={'Group':null,'OOV':'OOV','EVL-BVI':'EVL/BVI','OOE':'OOE'};
+  const coFilter=ENT_TO_CO[currentEntity];
+  const baseRows=rawRows.filter(r=>!coFilter||r.Company===coFilter);
+  const isZeroRow=vals=>vals.every(v=>!v);
+  const totalColStyle='style="font-weight:800;"';
+  const showMonths = currentMonth==='All' ? MONTHS : [currentMonth];
+
+  if(window.__expDivision===undefined) window.__expDivision='All';
+  if(window.__expDepartment===undefined) window.__expDepartment='All';
+  if(window.__expFee===undefined) window.__expFee='All';
+
+  const divisions=[...new Set(baseRows.map(r=>r.Division).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(window.__expDivision!=='All' && !divisions.includes(window.__expDivision)) window.__expDivision='All';
+  const afterDiv=baseRows.filter(r=>window.__expDivision==='All'||r.Division===window.__expDivision);
+
+  const departments=[...new Set(afterDiv.map(r=>r.Department).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(window.__expDepartment!=='All' && !departments.includes(window.__expDepartment)) window.__expDepartment='All';
+  const afterDept=afterDiv.filter(r=>window.__expDepartment==='All'||r.Department===window.__expDepartment);
+
+  const feeNamesAvail=[...new Set(afterDept.map(r=>r.FeesName).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(window.__expFee!=='All' && !feeNamesAvail.includes(window.__expFee)) window.__expFee='All';
+  const afterFee=afterDept.filter(r=>window.__expFee==='All'||r.FeesName===window.__expFee);
+
+  el.innerHTML = `<div class="sec-head"><div><div class="sec-title">Expense</div><div class="sec-sub">Source: tab Data (usd) — <span class="cpill ${pillClass(currentEntity)}">${currentEntity}</span> · figures in <b>USD</b></div></div></div>
+    <div style="margin-bottom:13px;display:flex;gap:16px;flex-wrap:wrap;">
+      <div class="filter-group" style="max-width:240px;">
+        <span class="filter-label">Division</span>
+        <div class="dd-wrap" id="dd-expdiv">
+          <button class="dd-trigger" id="ddExpDivTrigger"><span class="dd-val">${window.__expDivision}</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddExpDivMenu" style="max-height:260px;overflow-y:auto;"></div>
+        </div>
+      </div>
+      <div class="filter-group" style="max-width:240px;">
+        <span class="filter-label">Department</span>
+        <div class="dd-wrap" id="dd-expdept">
+          <button class="dd-trigger" id="ddExpDeptTrigger"><span class="dd-val">${window.__expDepartment}</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddExpDeptMenu" style="max-height:260px;overflow-y:auto;"></div>
+        </div>
+      </div>
+      <div class="filter-group" style="max-width:280px;">
+        <span class="filter-label">Fees Name</span>
+        <div class="dd-wrap" id="dd-expfee">
+          <button class="dd-trigger" id="ddExpFeeTrigger"><span class="dd-val">${window.__expFee}</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddExpFeeMenu" style="max-height:260px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="tbl-card"><div class="tbl-head"><span class="tbl-title">Expense Detail (USD)</span></div>
+    <div class="table-scroll"><table id="expTable"><thead><tr><th>Division</th><th>Department</th><th>Fees Name</th>${showMonths.map(m=>`<th>${m}</th>`).join('')}<th ${totalColStyle}>Total</th></tr></thead><tbody></tbody></table></div></div>
+    <div class="card"><div class="card-title">Expense chart (USD)</div><div class="cw lg"><canvas id="expChart"></canvas></div></div>`;
+
+  function buildDD(menuId,triggerId,options,current,onSelect){
+    const menu=document.getElementById(menuId); menu.innerHTML='';
+    options.forEach(opt=>{
+      const b=document.createElement('button');
+      b.className='dd-item'+(opt===current?' active':'');
+      b.innerHTML=`<span class="dck">✓</span>${opt}`;
+      b.onclick=()=>{ document.getElementById(menuId).classList.remove('open'); document.getElementById(triggerId).classList.remove('open'); onSelect(opt); };
+      menu.appendChild(b);
+    });
+  }
+  function wireDD(wrapId,triggerId,menuId){
+    document.getElementById(triggerId).onclick=()=>{
+      document.getElementById(menuId).classList.toggle('open');
+      document.getElementById(triggerId).classList.toggle('open');
+    };
+    document.addEventListener('click',function outside(e){
+      if(!document.getElementById(wrapId)) { document.removeEventListener('click',outside); return; }
+      if(!document.getElementById(wrapId).contains(e.target)){
+        document.getElementById(menuId).classList.remove('open');
+        document.getElementById(triggerId).classList.remove('open');
+      }
+    });
+  }
+  buildDD('ddExpDivMenu','ddExpDivTrigger',['All',...divisions],window.__expDivision,v=>{
+    window.__expDivision=v; window.__expDepartment='All'; window.__expFee='All'; renderExpense(el);
+  });
+  wireDD('dd-expdiv','ddExpDivTrigger','ddExpDivMenu');
+  buildDD('ddExpDeptMenu','ddExpDeptTrigger',['All',...departments],window.__expDepartment,v=>{
+    window.__expDepartment=v; window.__expFee='All'; renderExpense(el);
+  });
+  wireDD('dd-expdept','ddExpDeptTrigger','ddExpDeptMenu');
+  buildDD('ddExpFeeMenu','ddExpFeeTrigger',['All',...feeNamesAvail],window.__expFee,v=>{
+    window.__expFee=v; renderExpense(el);
+  });
+  wireDD('dd-expfee','ddExpFeeTrigger','ddExpFeeMenu');
+
+  const merged={};
+  afterFee.forEach(r=>{
+    const key=(r.Division||'')+'|||'+(r.Department||'')+'|||'+(r.FeesName||'');
+    if(!merged[key]) merged[key]={Division:r.Division,Department:r.Department,FeesName:r.FeesName,vals:showMonths.map(()=>0)};
+    showMonths.forEach((m,i)=>merged[key].vals[i]+=Number(r[m])||0);
+  });
+  const rows=Object.values(merged)
+    .filter(r=>!isZeroRow(r.vals))
+    .sort((a,b)=>(a.Division||'').localeCompare(b.Division||'')||(a.Department||'').localeCompare(b.Department||'')||(a.FeesName||'').localeCompare(b.FeesName||''));
+
+  document.querySelector('#expTable tbody').innerHTML = rows.map(r=>{
+    const tot=r.vals.reduce((a,b)=>a+b,0);
+    return `<tr><td>${r.Division||''}</td><td style="color:var(--txt3)">${r.Department||''}</td><td style="color:var(--txt3)">${r.FeesName||''}</td>${r.vals.map(v=>`<td class="mono ${v<0?'neg':''}">${nf(v)}</td>`).join('')}<td class="mono ${tot<0?'neg':''}" ${totalColStyle}>${nf(tot)}</td></tr>`;
+  }).join('') || `<tr><td colspan="${3+showMonths.length+1}">No non-zero data for this selection.</td></tr>`;
+  if(rows.length){
+    const sumVals=showMonths.map((m,i)=>rows.reduce((s,r)=>s+r.vals[i],0));
+    const sumTot=sumVals.reduce((a,b)=>a+b,0);
+    document.querySelector('#expTable tbody').innerHTML += `<tr class="sub"><td>Sum</td><td></td><td></td>${sumVals.map(v=>`<td class="mono ${v<0?'neg':''}">${nf(v)}</td>`).join('')}<td class="mono ${sumTot<0?'neg':''}" ${totalColStyle}>${nf(sumTot)}</td></tr>`;
   }
 
-  return ContentService
-    .createTextOutput(JSON.stringify(out))
-    .setMimeType(ContentService.MimeType.JSON);
+  const palette=['#6366f1','#0d9488','#8b5cf6','#22c55e','#d97706','#334155','#be185d','#0891b2'];
+  const byFee={};
+  rows.forEach(r=>{ const f=r.FeesName||'Other'; byFee[f]=byFee[f]||showMonths.map(()=>0); showMonths.forEach((m,i)=>byFee[f][i]+=r.vals[i]); });
+  const topFees=Object.keys(byFee).sort((a,b)=>{
+    const totA=byFee[a].reduce((s,v)=>s+Math.abs(v),0), totB=byFee[b].reduce((s,v)=>s+Math.abs(v),0);
+    return totB-totA;
+  }).slice(0,8);
+  mk('expChart','bar',{labels:showMonths,datasets:topFees.map((f,i)=>({label:f,data:byFee[f],backgroundColor:palette[i%palette.length]}))},
+    {scales:{x:{stacked:showMonths.length>1,grid:{display:false}},y:{stacked:showMonths.length>1,grid:{color:'#f0f2f5'}}}});
 }
 
-/**
- * Maps whatever label text currently sits in the sheet to the fixed
- * internal key the dashboard front-end expects. This keeps the
- * dashboard working even if rows get renamed (e.g. "Variable cost"
- * renamed to "Cost of Goods Sold"). Returns null for rows that
- * aren't one of the 8 canonical P&L lines (e.g. an extra summary
- * row like "Cash Sales (group)"), so they're simply skipped.
- */
-function canonicalTopKey(label) {
-  const l = String(label).trim().toLowerCase();
-  if (l.indexOf('cash sales') !== -1) return null; // extra summary row, not a canonical section
-  if (l === 'revenue' || (l.indexOf('revenue') !== -1 && l.indexOf('non-operating') === -1)) return 'Revenue';
-  if (l.indexOf('cost of goods') !== -1 || l === 'variable cost') return 'Variable cost';
-  if (l.indexOf('gross profit') !== -1 || l === 'contribution') return 'Contribution';
-  if (l === 'expense' || l === 'fixed cost' || l.indexOf('operating expense') !== -1) return 'Fixed cost';
-  if (l.indexOf('operating profit') !== -1) return 'Operating profit';
-  if (l.indexOf('ebitda') !== -1) return 'EBITDA';
-  if (l === 'ebit') return 'EBIT';
-  if (l.indexOf('net income') !== -1 || l.indexOf('net profit') !== -1) return 'Net income';
-  return null;
-}
 
-/**
- * Parses one P&L sheet (Group / OOV / EVL-BVI / OOE).
- * Structural rule (matches the existing sheet layout):
- *   - Column C holds a TOP-LEVEL line label — mapped to one of the
- *     8 canonical keys via canonicalTopKey() so renaming rows in the
- *     sheet doesn't break the dashboard.
- *   - Column D holds a CHILD line label (indented sub-item) belonging
- *     to the most recent top-level row above it.
- *   - Columns G:R hold Jan..Dec monthly values for that row.
- */
-function parsePLSheet(sh) {
-  const values = sh.getDataRange().getValues();
-  const CANONICAL_ORDER = ['Revenue', 'Variable cost', 'Contribution', 'Fixed cost',
-                            'Operating profit', 'EBITDA', 'EBIT', 'Net income'];
-  const order = [];
-  const lines = {};
-  let current = null;
+/* ================= DEPARTMENT COST ================= */
+function renderDeptCost(el){
+  const dc=DATA.departmentCost;
+  if(!dc){ el.innerHTML='<div class="empty-note">No Data (usd) available yet. Connect Apps Script to load it.</div>'; return; }
+  if(!dc.detected){
+    el.innerHTML = `<div class="empty-note">Could not auto-detect the structure of tab "Data (usd)". Please send the first 20-30 rows so the parser in Code.gs can be adjusted.
+      <pre style="white-space:pre-wrap;font-size:11px;margin-top:10px;">${JSON.stringify(dc.raw?.slice(0,10)||[],null,1)}</pre></div>`;
+    return;
+  }
+  const monthCols=dc.headers.filter(h=>MONTHS.includes(h));
+  const ENT_TO_CO={'Group':null,'OOV':'OOV','EVL-BVI':'EVL/BVI','OOE':'OOE'};
+  const coFilter=ENT_TO_CO[currentEntity];
+  const groupBy=window.__deptGroupBy||'division';
+  const isZeroRow=vals=>vals.every(v=>!v);
+  const totalColStyle='style="font-weight:800;"';
 
-  for (let r = 0; r < values.length; r++) {
-    const row = values[r];
-    const topLabelRaw = row[2];   // column C
-    const childLabel = row[3];    // column D
-    const monthVals = row.slice(6, 18).map(function (v) {
-      return (typeof v === 'number') ? v : 0;
+  el.innerHTML = `<div class="sec-head"><div><div class="sec-title">Monthly Department Cost</div><div class="sec-sub">Source: tab Data (usd) — <span class="cpill ${pillClass(currentEntity)}">${currentEntity}</span> · figures in <b>USD</b></div></div>
+    <div class="tab-row" id="groupByTabs">
+      <button class="tab-btn${groupBy==='division'?' active':''}" data-g="division">By Division</button>
+      <button class="tab-btn${groupBy==='fees'?' active':''}" data-g="fees">By Fees Name</button>
+    </div></div>
+    <div id="deptSubFilter" style="margin-bottom:13px;display:flex;gap:16px;flex-wrap:wrap;"></div>
+    <div class="tbl-card"><div class="tbl-head"><span class="tbl-title" id="deptTblTitle">Cost by Division / Department (USD)</span></div>
+    <div class="table-scroll"><table id="deptTable"><thead><tr id="deptTableHead"></tr></thead><tbody></tbody></table></div></div>
+    <div class="card"><div class="card-title" id="deptChartTitle">Cost chart by Division (USD)</div><div class="cw lg"><canvas id="deptChart"></canvas></div></div>`;
+
+  el.querySelectorAll('#groupByTabs .tab-btn').forEach(t=>t.onclick=()=>{
+    window.__deptGroupBy=t.dataset.g; window.__selectedFee='All'; window.__selectedDivision='All'; window.__selectedFeeDivision='All'; renderDeptCost(el);
+  });
+
+  const palette=['#1d4ed8','#0891b2','#7c3aed','#059669','#d97706','#0f172a','#be185d','#65a30d'];
+
+  if(groupBy==='division'){
+    const baseRows=dc.rows.filter(r=>!coFilter||r.Company===coFilter);
+    const divisions=[...new Set(baseRows.map(r=>r.Division).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    if(window.__selectedDivision===undefined) window.__selectedDivision='All';
+    if(window.__selectedDivision!=='All' && !divisions.includes(window.__selectedDivision)) window.__selectedDivision='All';
+
+    document.getElementById('deptSubFilter').innerHTML = `
+      <div class="filter-group" style="max-width:280px;">
+        <span class="filter-label">Division</span>
+        <div class="dd-wrap" id="dd-div">
+          <button class="dd-trigger" id="ddDivTrigger"><span class="dd-val" id="ddDivVal">${window.__selectedDivision}</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddDivMenu" style="max-height:280px;overflow-y:auto;"></div>
+        </div>
+      </div>`;
+    document.getElementById('deptTableHead').innerHTML = `<th>Division</th><th>Department</th>${monthCols.map(m=>`<th>${m}</th>`).join('')}<th ${totalColStyle}>Total</th>`;
+    document.getElementById('deptTblTitle').textContent='Cost by Division / Department (USD)';
+    document.getElementById('deptChartTitle').textContent='Cost chart by Division (USD)';
+
+    function buildDivDropdown(){
+      const menu=document.getElementById('ddDivMenu'); menu.innerHTML='';
+      ['All',...divisions].forEach(d=>{
+        const b=document.createElement('button');
+        b.className='dd-item'+(d===window.__selectedDivision?' active':'');
+        b.innerHTML=`<span class="dck">✓</span>${d}`;
+        b.onclick=()=>{ window.__selectedDivision=d; document.getElementById('ddDivMenu').classList.remove('open');
+          document.getElementById('ddDivTrigger').classList.remove('open'); renderDeptCost(el); };
+        menu.appendChild(b);
+      });
+    }
+    buildDivDropdown();
+    document.getElementById('ddDivTrigger').onclick=()=>{
+      document.getElementById('ddDivMenu').classList.toggle('open');
+      document.getElementById('ddDivTrigger').classList.toggle('open');
+    };
+    document.addEventListener('click',function divOutside(e){
+      if(!document.getElementById('dd-div')) { document.removeEventListener('click',divOutside); return; }
+      if(!document.getElementById('dd-div').contains(e.target)){
+        document.getElementById('ddDivMenu').classList.remove('open');
+        document.getElementById('ddDivTrigger').classList.remove('open');
+      }
     });
 
-    if (topLabelRaw && String(topLabelRaw).trim() !== '') {
-      const key = canonicalTopKey(topLabelRaw);
-      current = key; // null for non-canonical rows like "Cash Sales (group)" — their children get skipped below
-      if (key && !lines[key]) {
-        order.push(key);
-        lines[key] = { values: monthVals, children: [] };
-      }
-    } else if (current && childLabel && String(childLabel).trim() !== '' &&
-               String(childLabel).trim().toLowerCase().indexOf('margin') === -1) {
-      lines[current].children.push({ label: String(childLabel).trim(), values: monthVals });
-    }
-  }
-
-  // Always return sections in the fixed canonical order (fill any
-  // missing ones with zeros) so the dashboard's charts/tables never
-  // break due to a missing or reordered row.
-  const finalOrder = [];
-  const finalLines = {};
-  CANONICAL_ORDER.forEach(function (key) {
-    finalOrder.push(key);
-    finalLines[key] = lines[key] || { values: MONTHS.map(function () { return 0; }), children: [] };
-  });
-
-  return { months: MONTHS, order: finalOrder, lines: finalLines };
-}
-
-/**
- * Parses the "Data (usd)" sheet (Division / Department / Fees Name
- * granular cost data). Header row is auto-detected by looking for a
- * row containing "Fees Name" — so inserting/reordering columns is
- * fine as long as the header names stay the same.
- */
-function parseDataUsdSheet(sh) {
-  const values = sh.getDataRange().getValues();
-
-  let headerRowIdx = -1;
-  let col = {};
-  for (let r = 0; r < values.length; r++) {
-    const row = values[r];
-    const idx = row.indexOf('Fees Name');
-    if (idx !== -1) {
-      headerRowIdx = r;
-      row.forEach(function (h, i) {
-        if (h && typeof h === 'string') col[h.trim()] = i;
+    function draw(filterDiv){
+      const filteredBase=baseRows.filter(r=>!filterDiv||filterDiv==='All'||r.Division===filterDiv);
+      const merged={};
+      filteredBase.forEach(r=>{
+        const key=(r.Division||'')+'|||'+(r.Department||'');
+        if(!merged[key]) merged[key]={Division:r.Division,Department:r.Department,vals:monthCols.map(()=>0)};
+        monthCols.forEach((m,i)=>merged[key].vals[i]+=Number(r[m])||0);
       });
-      break;
+      const rows=Object.values(merged)
+        .filter(r=>!isZeroRow(r.vals))
+        .sort((a,b)=>(a.Division||'').localeCompare(b.Division||'')||(a.Department||'').localeCompare(b.Department||''));
+      document.querySelector('#deptTable tbody').innerHTML = rows.map(r=>{
+        const tot=r.vals.reduce((a,b)=>a+b,0);
+        return `<tr><td>${r.Division||''}</td><td style="color:var(--txt3)">${r.Department||''}</td>${r.vals.map(v=>`<td class="mono">${nf(v)}</td>`).join('')}<td class="mono" ${totalColStyle}>${nf(tot)}</td></tr>`;
+      }).join('') || '<tr><td colspan="9">No non-zero data for this selection.</td></tr>';
+      if(rows.length){
+        const sumVals=monthCols.map((m,i)=>rows.reduce((s,r)=>s+r.vals[i],0));
+        const sumTot=sumVals.reduce((a,b)=>a+b,0);
+        document.querySelector('#deptTable tbody').innerHTML += `<tr class="sub"><td>Sum</td><td></td>${sumVals.map(v=>`<td class="mono">${nf(v)}</td>`).join('')}<td class="mono" ${totalColStyle}>${nf(sumTot)}</td></tr>`;
+      }
+      const byDiv={};
+      rows.forEach(r=>{ const d=r.Division||'Other'; byDiv[d]=byDiv[d]||monthCols.map(()=>0); monthCols.forEach((m,i)=>byDiv[d][i]+=r.vals[i]); });
+      mk('deptChart','bar',{labels:monthCols,datasets:Object.keys(byDiv).map((d,i)=>({label:d,data:byDiv[d],backgroundColor:palette[i%palette.length]}))},
+        {scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:'#f0f2f5'}}}});
     }
+    draw(window.__selectedDivision);
+  } else {
+    const feesRowsAll=(typeof FEES_COST_REAL!=='undefined'?FEES_COST_REAL:[]).filter(r=>!coFilter||r.Company===coFilter);
+    const divisions=[...new Set(feesRowsAll.map(r=>r.Division).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    if(window.__selectedFeeDivision===undefined) window.__selectedFeeDivision='All';
+    if(window.__selectedFeeDivision!=='All' && !divisions.includes(window.__selectedFeeDivision)) window.__selectedFeeDivision='All';
+    const feesRows=feesRowsAll.filter(r=>window.__selectedFeeDivision==='All'||r.Division===window.__selectedFeeDivision);
+
+    document.getElementById('deptTableHead').innerHTML = `<th>Fees Name</th>${monthCols.map(m=>`<th>${m}</th>`).join('')}<th ${totalColStyle}>Total</th>`;
+    document.getElementById('deptTblTitle').textContent='Cost by Fees Name (USD)';
+    document.getElementById('deptChartTitle').textContent='Cost chart by Fees Name (USD)';
+
+    const merged={};
+    feesRows.forEach(r=>{
+      const key=r.FeesName||'Other';
+      if(!merged[key]) merged[key]=monthCols.map(()=>0);
+      monthCols.forEach((m,i)=>merged[key][i]+=Number(r[m])||0);
+    });
+    const feeNames=Object.keys(merged)
+      .filter(fee=>!isZeroRow(merged[fee]))
+      .sort((a,b)=>a.localeCompare(b));
+
+    if(window.__selectedFee===undefined) window.__selectedFee='All';
+    if(!feeNames.includes(window.__selectedFee)) window.__selectedFee='All';
+
+    document.getElementById('deptSubFilter').innerHTML = `
+      <div class="filter-group" style="max-width:280px;">
+        <span class="filter-label">Division</span>
+        <div class="dd-wrap" id="dd-feediv">
+          <button class="dd-trigger" id="ddFeeDivTrigger"><span class="dd-val" id="ddFeeDivVal">${window.__selectedFeeDivision}</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddFeeDivMenu" style="max-height:280px;overflow-y:auto;"></div>
+        </div>
+      </div>
+      <div class="filter-group" style="max-width:280px;">
+        <span class="filter-label">Fees Name</span>
+        <div class="dd-wrap" id="dd-fee">
+          <button class="dd-trigger" id="ddFeeTrigger"><span class="dd-val" id="ddFeeVal">${window.__selectedFee}</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddFeeMenu" style="max-height:280px;overflow-y:auto;"></div>
+        </div>
+      </div>`;
+
+    function buildFeeDivDropdown(){
+      const menu=document.getElementById('ddFeeDivMenu'); menu.innerHTML='';
+      ['All',...divisions].forEach(d=>{
+        const b=document.createElement('button');
+        b.className='dd-item'+(d===window.__selectedFeeDivision?' active':'');
+        b.innerHTML=`<span class="dck">✓</span>${d}`;
+        b.onclick=()=>{ window.__selectedFeeDivision=d; window.__selectedFee='All'; document.getElementById('ddFeeDivMenu').classList.remove('open');
+          document.getElementById('ddFeeDivTrigger').classList.remove('open'); renderDeptCost(el); };
+        menu.appendChild(b);
+      });
+    }
+    buildFeeDivDropdown();
+    document.getElementById('ddFeeDivTrigger').onclick=()=>{
+      document.getElementById('ddFeeDivMenu').classList.toggle('open');
+      document.getElementById('ddFeeDivTrigger').classList.toggle('open');
+    };
+    document.addEventListener('click',function feeDivOutside(e){
+      if(!document.getElementById('dd-feediv')) { document.removeEventListener('click',feeDivOutside); return; }
+      if(!document.getElementById('dd-feediv').contains(e.target)){
+        document.getElementById('ddFeeDivMenu').classList.remove('open');
+        document.getElementById('ddFeeDivTrigger').classList.remove('open');
+      }
+    });
+
+    function buildFeeDropdown(){
+      const menu=document.getElementById('ddFeeMenu'); menu.innerHTML='';
+      ['All',...feeNames].forEach(fee=>{
+        const b=document.createElement('button');
+        b.className='dd-item'+(fee===window.__selectedFee?' active':'');
+        b.innerHTML=`<span class="dck">✓</span>${fee}`;
+        b.onclick=()=>{ window.__selectedFee=fee; document.getElementById('ddFeeMenu').classList.remove('open');
+          document.getElementById('ddFeeTrigger').classList.remove('open'); renderDeptCost(el); };
+        menu.appendChild(b);
+      });
+    }
+    buildFeeDropdown();
+    document.getElementById('ddFeeTrigger').onclick=()=>{
+      document.getElementById('ddFeeMenu').classList.toggle('open');
+      document.getElementById('ddFeeTrigger').classList.toggle('open');
+    };
+    document.addEventListener('click',function feeOutside(e){
+      if(!document.getElementById('dd-fee')) { document.removeEventListener('click',feeOutside); return; }
+      if(!document.getElementById('dd-fee').contains(e.target)){
+        document.getElementById('ddFeeMenu').classList.remove('open');
+        document.getElementById('ddFeeTrigger').classList.remove('open');
+      }
+    });
+
+    const showFees = window.__selectedFee==='All' ? feeNames : [window.__selectedFee];
+    document.querySelector('#deptTable tbody').innerHTML = showFees.map(fee=>{
+      const vals=merged[fee]; const tot=vals.reduce((a,b)=>a+b,0);
+      return `<tr><td>${fee}</td>${vals.map(v=>`<td class="mono ${v<0?'neg':''}">${nf(v)}</td>`).join('')}<td class="mono ${tot<0?'neg':''}" ${totalColStyle}>${nf(tot)}</td></tr>`;
+    }).join('') || '<tr><td colspan="9">No non-zero Fees Name data for this entity.</td></tr>';
+    if(showFees.length){
+      const sumVals=monthCols.map((m,i)=>showFees.reduce((s,fee)=>s+(merged[fee][i]||0),0));
+      const sumTot=sumVals.reduce((a,b)=>a+b,0);
+      document.querySelector('#deptTable tbody').innerHTML += `<tr class="sub"><td>Sum</td>${sumVals.map(v=>`<td class="mono ${v<0?'neg':''}">${nf(v)}</td>`).join('')}<td class="mono ${sumTot<0?'neg':''}" ${totalColStyle}>${nf(sumTot)}</td></tr>`;
+    }
+
+    const byMagnitude=[...feeNames].sort((a,b)=>{
+      const totA=merged[a].reduce((s,v)=>s+Math.abs(v),0), totB=merged[b].reduce((s,v)=>s+Math.abs(v),0);
+      return totB-totA;
+    });
+    const chartFees = window.__selectedFee==='All' ? byMagnitude.slice(0,8) : [window.__selectedFee];
+    mk('deptChart','bar',{labels:monthCols,datasets:chartFees.map((fee,i)=>({label:fee,data:merged[fee],backgroundColor:palette[i%palette.length]}))},
+      {scales:{x:{stacked:window.__selectedFee==='All',grid:{display:false}},y:{stacked:window.__selectedFee==='All',grid:{color:'#f0f2f5'}}}});
   }
-  if (headerRowIdx === -1) {
-    return { departmentCost: { detected: false, raw: values.slice(0, 10) }, feesCost: [], expenseFull: [] };
-  }
-
-  const colCountry = col['Country name'];
-  const colDivision = col['Division'];
-  const colDept = col['Dept name'];
-  const colFees = col['Fees Name'];
-  const colJan = col['Jan'];
-
-  const deptAgg = {};   // key: Company|||Division|||Department
-  const feesAgg = {};   // key: Company|||Division|||FeesName
-  const fullRows = [];  // one row per Company/Division/Department/FeesName
-
-  for (let r = headerRowIdx + 1; r < values.length; r++) {
-    const row = values[r];
-    const company = row[colCountry];
-    const division = row[colDivision];
-    const dept = row[colDept];
-    const fees = row[colFees];
-    if (!company || !fees) continue;
-
-    const monthVals = {};
-    for (let m = 0; m < 12; m++) {
-      const v = row[colJan + m];
-      monthVals[MONTHS[m]] = (typeof v === 'number') ? Math.round(v) : 0;
-    }
-
-    // department cost aggregation
-    const dKey = company + '|||' + division + '|||' + dept;
-    if (!deptAgg[dKey]) {
-      deptAgg[dKey] = { Company: company, Division: division, Department: dept };
-      MONTHS.slice(0, 6).forEach(function (m) { deptAgg[dKey][m] = 0; });
-    }
-    MONTHS.slice(0, 6).forEach(function (m) { deptAgg[dKey][m] += monthVals[m]; });
-
-    // fees cost aggregation (Company + Division + FeesName)
-    const fKey = company + '|||' + division + '|||' + fees;
-    if (!feesAgg[fKey]) {
-      feesAgg[fKey] = { Company: company, Division: division, FeesName: fees };
-      MONTHS.forEach(function (m) { feesAgg[fKey][m] = 0; });
-    }
-    MONTHS.forEach(function (m) { feesAgg[fKey][m] += monthVals[m]; });
-
-    // full granular row (Company + Division + Department + FeesName)
-    const fullRow = { Company: company, Division: division, Department: dept, FeesName: fees };
-    MONTHS.forEach(function (m) { fullRow[m] = monthVals[m]; });
-    fullRows.push(fullRow);
-  }
-
-  const deptRows = Object.keys(deptAgg).map(function (k) { return deptAgg[k]; });
-  const feesRows = Object.keys(feesAgg).map(function (k) { return feesAgg[k]; });
-
-  return {
-    departmentCost: {
-      detected: true,
-      headers: ['Division', 'Department'].concat(MONTHS.slice(0, 6)),
-      rows: deptRows
-    },
-    feesCost: feesRows,
-    expenseFull: fullRows
-  };
 }
+
+/* ================= INIT ================= */
+(async function init(){
+  await loadConfig();
+  render();
+  if(webAppUrl) fetchLiveData();
+  document.getElementById('lastUpdated').textContent='Real data — 2_Data_PL (Jan-Jun)';
+  document.getElementById('tbBadge').textContent='Real data';
+  document.getElementById('sbSource').textContent='Google Sheets';
+  document.getElementById('footRight').textContent='Source: 2_Data_PL · Jan-Jun figures available';
+})();
+</script>
+</body>
+</html>
