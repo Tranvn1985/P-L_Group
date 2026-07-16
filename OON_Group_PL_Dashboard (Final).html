@@ -395,8 +395,18 @@ function sparklineSVG(values,color,gid,dimMonth){
 }
 
 /* ================= CONFIG PERSIST ================= */
-async function loadConfig(){ try{ const r=await window.storage.get('config:webapp_url'); if(r&&r.value) webAppUrl=r.value; }catch(e){} }
-async function saveConfig(url){ webAppUrl=url; try{ await window.storage.set('config:webapp_url',url); }catch(e){ console.error(e); } }
+async function loadConfig(){
+  try{
+    const v = localStorage.getItem('pl_dashboard_webapp_url');
+    if(v) webAppUrl = v;
+  }catch(e){ console.error('loadConfig failed', e); }
+}
+async function saveConfig(url){
+  webAppUrl = url;
+  try{
+    localStorage.setItem('pl_dashboard_webapp_url', url);
+  }catch(e){ console.error('saveConfig failed', e); }
+}
 
 async function fetchLiveData(){
   if(!webAppUrl){
