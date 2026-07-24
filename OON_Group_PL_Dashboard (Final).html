@@ -945,6 +945,7 @@ function renderDeptCost(el){
   el.innerHTML = `<div class="sec-head"><div><div class="sec-title">Monthly Department Cost</div><div class="sec-sub">Source: tab Data (usd) — <span class="cpill ${pillClass(currentEntity)}">${currentEntity}</span> · figures in <b>USD</b></div></div>
     <div class="tab-row" id="groupByTabs">
       <button class="tab-btn${groupBy==='division'?' active':''}" data-g="division">By Division</button>
+      <button class="tab-btn${groupBy==='department'?' active':''}" data-g="department">By Department</button>
       <button class="tab-btn${groupBy==='fees'?' active':''}" data-g="fees">By Fees Name</button>
     </div></div>
     <div id="deptSubFilter" style="margin-bottom:13px;display:flex;gap:16px;flex-wrap:wrap;"></div>
@@ -953,7 +954,7 @@ function renderDeptCost(el){
     <div class="card"><div class="card-title" id="deptChartTitle">Cost chart by Division (USD)</div><div class="cw lg"><canvas id="deptChart"></canvas></div></div>`;
 
   el.querySelectorAll('#groupByTabs .tab-btn').forEach(t=>t.onclick=()=>{
-    window.__deptGroupBy=t.dataset.g; window.__selectedFee=['All']; window.__selectedDivision=['All']; window.__selectedFeeDivision=['All']; renderDeptCost(el);
+    window.__deptGroupBy=t.dataset.g; window.__selectedFee=['All']; window.__selectedDivision=['All']; window.__selectedFeeDivision=['All']; window.__selectedDeptOnly=['All']; window.__selectedDeptFee=['All']; renderDeptCost(el);
   });
 
   const palette=['#1d4ed8','#0891b2','#7c3aed','#059669','#d97706','#0f172a','#be185d','#65a30d'];
@@ -1008,6 +1009,75 @@ function renderDeptCost(el){
         {scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:'#f0f2f5'}}}});
     }
     draw(window.__selectedDivision);
+  } else if(groupBy==='department'){
+    const fullRowsAll=(typeof EXPENSE_FULL_REAL!=='undefined'?EXPENSE_FULL_REAL:[]).filter(r=>!coFilter||r.Company===coFilter);
+    const depts=[...new Set(fullRowsAll.map(r=>r.Department).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    if(window.__selectedDeptOnly===undefined) window.__selectedDeptOnly=['All'];
+    window.__selectedDeptOnly=window.__selectedDeptOnly.filter(v=>v==='All'||depts.includes(v));
+    if(window.__selectedDeptOnly.length===0) window.__selectedDeptOnly=['All'];
+    const afterDept=fullRowsAll.filter(r=>inSel(window.__selectedDeptOnly,r.Department));
+
+    const merged={};
+    afterDept.forEach(r=>{
+      const key=r.FeesName||'Other';
+      if(!merged[key]) merged[key]=MONTHS.map(()=>0);
+      MONTHS.forEach((m,i)=>merged[key][i]+=Number(r[m])||0);
+    });
+    const feeNames=Object.keys(merged)
+      .filter(fee=>!isZeroRow(merged[fee]))
+      .sort((a,b)=>a.localeCompare(b));
+
+    if(window.__selectedDeptFee===undefined) window.__selectedDeptFee=['All'];
+    window.__selectedDeptFee=window.__selectedDeptFee.filter(v=>v==='All'||feeNames.includes(v));
+    if(window.__selectedDeptFee.length===0) window.__selectedDeptFee=['All'];
+
+    document.getElementById('deptSubFilter').innerHTML = `
+      <div class="filter-group" style="max-width:280px;">
+        <span class="filter-label">Department</span>
+        <div class="dd-wrap" id="dd-deptonly">
+          <button class="dd-trigger" id="ddDeptOnlyTrigger"><span class="dd-val" id="ddDeptOnlyVal">All</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddDeptOnlyMenu" style="max-height:280px;overflow-y:auto;"></div>
+        </div>
+      </div>
+      <div class="filter-group" style="max-width:280px;">
+        <span class="filter-label">Fees Name</span>
+        <div class="dd-wrap" id="dd-deptfee">
+          <button class="dd-trigger" id="ddDeptFeeTrigger"><span class="dd-val" id="ddDeptFeeVal">All</span><span class="dd-arr">▼</span></button>
+          <div class="dd-menu" id="ddDeptFeeMenu" style="max-height:280px;overflow-y:auto;"></div>
+        </div>
+      </div>`;
+    document.getElementById('deptTableHead').innerHTML = `<th>Fees Name</th>${MONTHS.map(m=>`<th>${m}</th>`).join('')}<th ${totalColStyle}>Total</th>`;
+    document.getElementById('deptTblTitle').textContent='Cost by Department — Fees Name (USD)';
+    document.getElementById('deptChartTitle').textContent='Cost chart by Fees Name (USD)';
+
+    buildMultiSelectDD('ddDeptOnlyMenu','ddDeptOnlyTrigger','ddDeptOnlyVal',depts,window.__selectedDeptOnly,v=>{
+      window.__selectedDeptOnly=v; window.__selectedDeptFee=['All']; renderDeptCost(el);
+    });
+    wireDD('dd-deptonly','ddDeptOnlyTrigger','ddDeptOnlyMenu');
+    buildMultiSelectDD('ddDeptFeeMenu','ddDeptFeeTrigger','ddDeptFeeVal',feeNames,window.__selectedDeptFee,v=>{
+      window.__selectedDeptFee=v; renderDeptCost(el);
+    });
+    wireDD('dd-deptfee','ddDeptFeeTrigger','ddDeptFeeMenu');
+
+    const showFees = window.__selectedDeptFee.includes('All') ? feeNames : feeNames.filter(f=>window.__selectedDeptFee.includes(f));
+    document.querySelector('#deptTable tbody').innerHTML = showFees.map(fee=>{
+      const vals=merged[fee]; const tot=vals.reduce((a,b)=>a+b,0);
+      return `<tr><td>${fee}</td>${vals.map(v=>`<td class="mono ${v<0?'neg':''}">${nf(v)}</td>`).join('')}<td class="mono ${tot<0?'neg':''}" ${totalColStyle}>${nf(tot)}</td></tr>`;
+    }).join('') || '<tr><td colspan="14">No non-zero data for this selection.</td></tr>';
+    if(showFees.length){
+      const sumVals=MONTHS.map((m,i)=>showFees.reduce((s,fee)=>s+(merged[fee][i]||0),0));
+      const sumTot=sumVals.reduce((a,b)=>a+b,0);
+      document.querySelector('#deptTable tbody').innerHTML += `<tr class="sub"><td>Sum</td>${sumVals.map(v=>`<td class="mono ${v<0?'neg':''}">${nf(v)}</td>`).join('')}<td class="mono ${sumTot<0?'neg':''}" ${totalColStyle}>${nf(sumTot)}</td></tr>`;
+    }
+
+    const byMagnitude=[...showFees].sort((a,b)=>{
+      const totA=merged[a].reduce((s,v)=>s+Math.abs(v),0), totB=merged[b].reduce((s,v)=>s+Math.abs(v),0);
+      return totB-totA;
+    });
+    const chartFees2=byMagnitude.slice(0,8);
+    const stackIt2 = window.__selectedDeptFee.includes('All') || window.__selectedDeptFee.length>1;
+    mk('deptChart','bar',{labels:MONTHS,datasets:chartFees2.map((fee,i)=>({label:fee,data:merged[fee],backgroundColor:palette[i%palette.length]}))},
+      {scales:{x:{stacked:stackIt2,grid:{display:false}},y:{stacked:stackIt2,grid:{color:'#f0f2f5'}}}});
   } else {
     const feesRowsAll=(typeof FEES_COST_REAL!=='undefined'?FEES_COST_REAL:[]).filter(r=>!coFilter||r.Company===coFilter);
     const divisions=[...new Set(feesRowsAll.map(r=>r.Division).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
